@@ -75,6 +75,12 @@ try {
     }
 
     $libraries = @($entries.Keys | Where-Object { $_ -match "^lib/.+\.jar$" })
+    if (@($libraries | Where-Object { $_ -match "^lib/kotlin-stdlib-" }).Count) {
+        throw "Package must not bundle the host-provided Kotlin standard library"
+    }
+    $duplicateLibraries = @($libraries | ForEach-Object { Split-Path $_ -Leaf } |
+        Group-Object | Where-Object Count -gt 1)
+    if ($duplicateLibraries.Count) { throw "Duplicate library file names: $($duplicateLibraries.Name -join ', ')" }
     if ($libraries.Count -eq 0) { throw "No runtime libraries were packaged" }
     if (-not @($entries.Keys | Where-Object { $_ -match "^source/.+\.zip$" }).Count) {
         throw "Source archive is missing from the package"

@@ -41,7 +41,7 @@ jobs:
       - name: Build and verify
         shell: pwsh
         run: |
-          ./gradlew --no-daemon --stacktrace test plugin spoutChecks
+          ./gradlew --no-daemon --stacktrace test combinedChecks plugin spoutChecks
           if ($LASTEXITCODE -ne 0) { throw "Gradle build failed" }
           $package = @(Get-ChildItem build/distributions -Filter '*.spmod' -File)
           if ($package.Count -ne 1) { throw "Expected exactly one .spmod, found $($package.Count)" }

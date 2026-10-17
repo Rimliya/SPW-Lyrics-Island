@@ -30,7 +30,7 @@ kotlin {
             )
         }
         test {
-            kotlin.srcDirs("modules/island/src/test/kotlin")
+            kotlin.srcDirs("modules/island/src/test/kotlin", "modules/combined/src/test/kotlin")
         }
     }
 }
@@ -115,6 +115,12 @@ tasks.test {
     failOnNoDiscoveredTests = false
 }
 
+tasks.register<JavaExec>("combinedChecks") {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("io.github.gaboron.spwlyricsisland.CombinedChecksKt")
+    jvmArgs("-Djava.awt.headless=true")
+}
 tasks.register<JavaExec>("spoutChecks") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
@@ -243,7 +249,7 @@ tasks.named<Zip>("plugin") {
             } else artifact.file.name
         }
     }
-    dependsOn(tasks.jar, "sourceArchive", "spoutChecks")
+    dependsOn(tasks.jar, "sourceArchive", "spoutChecks", "combinedChecks")
     archiveFileName.set("spw-lyrics-island-${project.version}.spmod")
     destinationDirectory.set(layout.buildDirectory.dir("distributions"))
     eachFile {

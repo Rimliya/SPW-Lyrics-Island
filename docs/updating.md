@@ -24,7 +24,7 @@ git subtree pull --prefix modules/lyrics https://github.com/Rimliya/SPW-Lyrics.g
 同步后更新 `README.md` 的“来源版本”表，并运行：
 
 ```powershell
-./gradlew --no-daemon --stacktrace test plugin spoutChecks
+./gradlew --no-daemon --stacktrace test combinedChecks plugin spoutChecks
 ./scripts/verify-spmod.ps1
 ```
 

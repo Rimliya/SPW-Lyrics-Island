@@ -57,7 +57,7 @@ src/main/resources ← 单一插件清单、合并后的设置页
 - `workflow_dispatch`：手动构建。
 
 ```powershell
-./gradlew --no-daemon --stacktrace test plugin spoutChecks
+./gradlew --no-daemon --stacktrace test combinedChecks plugin spoutChecks
 ./scripts/verify-spmod.ps1
 ```
 

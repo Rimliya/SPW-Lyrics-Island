@@ -45,3 +45,10 @@ modules/lyrics/src/main/resources/preference_config.json
 ## 依赖
 
 根项目取两个模块依赖的并集，并只打一个 `.spmod`。Kotlin、Workshop API 和 PF4J 仍由 SPW 宿主提供，不随包重复分发。
+## 占用与回调优化
+
+- 根项目只打包一套 Compose、Skiko、JNA、Jaudiotagger 和字体资源，两个模块不会各自携带副本。
+- `lib/kotlin-stdlib-*.jar` 由 SPW 宿主提供，打包时明确排除。
+- 手动搜索和批量处理窗口在第一次打开时才加载 Compose/Skiko；不用这些窗口时不会初始化额外渲染上下文。
+- 宿主只注册一个播放 Extension。每秒位置回调只转发给词岛；歌词加载回调按需同时转发给两个模块。
+- `combinedChecks` 在不启动 SPW 的情况下验证合并设置、Extension 注册和两个回调代理；`verify-spmod.ps1` 再检查重复库名和 Kotlin 标准库泄漏。
