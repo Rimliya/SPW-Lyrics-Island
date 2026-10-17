@@ -1,0 +1,332 @@
+{
+  "configs": [
+    {
+      "title": "灵动词岛",
+      "config": "island.json",
+      "preferences": [
+        {
+          "type": "switch",
+          "key": "enabled",
+          "title": "显示词岛",
+          "default_value": true
+        },
+        {
+          "type": "switch",
+          "key": "translation",
+          "title": "显示翻译",
+          "default_value": true
+        },
+        {
+          "type": "switch",
+          "key": "karaoke",
+          "title": "逐字高亮与长音强调",
+          "default_value": true
+        },
+        {
+          "type": "switch",
+          "key": "force_karaoke",
+          "title": "强制逐字显示",
+          "default_value": false,
+          "summary": "开启逐字高亮后，为普通 LRC 按行时长估算逐字进度；估算歌词不应用长音发光。原生逐字时间轴优先。"
+        },
+        {
+          "type": "switch",
+          "key": "experimental_multi_line",
+          "title": "实验性多行歌词",
+          "default_value": false,
+          "summary": "使用 SPW 提供的完整歌词时间轴，保留尚未结束的已播歌词；发生重叠时自动展开显示。"
+        },
+        {
+          "type": "switch",
+          "key": "click_through",
+          "title": "鼠标穿透",
+          "default_value": false
+        },
+        {
+          "type": "switch",
+          "key": "auto_hide_on_hover",
+          "title": "鼠标经过时自动隐藏",
+          "default_value": false,
+          "summary": "开启后同时穿透鼠标，经过词岛时隐藏，移开后恢复。Linux 支持 X11、KDE Wayland；GNOME Wayland 需安装配套扩展。"
+        },
+        {
+          "type": "switch",
+          "key": "hide_fullscreen",
+          "title": "全屏时隐藏（Windows）",
+          "default_value": true
+        },
+        {
+          "type": "switch",
+          "key": "hide_paused",
+          "title": "暂停时隐藏",
+          "default_value": false
+        },
+        {
+          "type": "switch",
+          "key": "reduced_motion",
+          "title": "低性能模式",
+          "default_value": false,
+          "summary": "降低刷新率，使用简化高亮和模拟频谱，停用实时音频捕获、液态玻璃与复杂动效。"
+        },
+        {
+          "type": "list",
+          "key": "shape",
+          "title": "外观",
+          "entries": [
+            "胶囊",
+            "顶部刘海"
+          ],
+          "entry_values": [
+            "pill",
+            "notch"
+          ],
+          "default_value": "pill"
+        },
+        {
+          "type": "seekbar",
+          "key": "corner_roundness",
+          "title": "圆角大小 %",
+          "default_value": 60,
+          "min": 0,
+          "max": 100,
+          "summary": "0 为直角，100 为最大圆角；圆角会随词岛高度自动缩放。"
+        },
+        {
+          "type": "button",
+          "title": "歌词字体（Windows）",
+          "summary": "打开字体窗口，选择字体提供的字形样式，并预览词岛效果。",
+          "arrow_type": "arrow",
+          "on_click": "io.github.gaboron.spwisland.host.IslandPlugin.chooseFont"
+        },
+        {
+          "type": "edittext",
+          "key": "font_family",
+          "title": "歌词字体（Linux）",
+          "default_value": "@island-default",
+          "summary": "Linux 使用此项设置字体；@island-default 使用内置苹方，留空使用内置 MiSans。Windows 请使用上方字体窗口。"
+        },
+        {
+          "type": "list",
+          "key": "font_weight",
+          "title": "歌词字重（Linux）",
+          "entries": [
+            "极细 100",
+            "细体 300",
+            "次细 350",
+            "常规 400",
+            "中等 500",
+            "粗体 700",
+            "极粗 900"
+          ],
+          "entry_values": [
+            "100",
+            "300",
+            "350",
+            "400",
+            "500",
+            "700",
+            "900"
+          ],
+          "default_value": "400",
+          "summary": "Linux 使用此项选择字重。自选字体缺少对应字重时使用最接近的已有字重。"
+        },
+        {
+          "type": "button",
+          "title": "安装 GNOME 悬停隐藏支持（Linux）",
+          "summary": "适用于 GNOME Wayland 45–50；首次安装或更新配套指针扩展后需重新登录。",
+          "arrow_type": "none",
+          "on_click": "io.github.gaboron.spwisland.host.IslandPlugin.installGnomePointer"
+        },
+        {
+          "type": "seekbar",
+          "key": "font_size",
+          "title": "字号",
+          "default_value": 22,
+          "min": 12,
+          "max": 72
+        },
+        {
+          "type": "seekbar",
+          "key": "max_width",
+          "title": "最大宽度",
+          "default_value": 640,
+          "min": 280,
+          "max": 1200
+        },
+        {
+          "type": "switch",
+          "key": "fixed_width",
+          "title": "固定词岛宽度",
+          "default_value": false,
+          "summary": "开启后始终使用“最大宽度”的值，不再随歌词长度收缩。"
+        },
+        {
+          "type": "list",
+          "key": "leading_content",
+          "title": "两侧信息",
+          "entries": [
+            "左侧封面 + 右侧频谱",
+            "左侧实时频谱",
+            "左侧专辑封面",
+            "都不显示"
+          ],
+          "entry_values": [
+            "cover_spectrum",
+            "spectrum",
+            "cover",
+            "none"
+          ],
+          "default_value": "cover_spectrum",
+          "summary": "单项模式沿用左侧内容与右侧播放状态；封面来自本地音频内嵌图片或同目录 cover/folder 图片。"
+        },
+        {
+          "type": "list",
+          "key": "background_style",
+          "title": "背景样式（Windows）",
+          "entries": [
+            "经典背景",
+            "液态玻璃（实验性）"
+          ],
+          "entry_values": [
+            "classic",
+            "liquid_glass"
+          ],
+          "default_value": "classic",
+          "summary": "液态玻璃使用实时桌面模糊、边缘折射、轻微色散与方向高光，需要 Windows 11 及 SDR 显示器。背景不取封面颜色；不透明度调节中性基底。启用时词岛从系统录屏中排除；低性能或捕获不可用时使用经典背景，原因见关于窗口。"
+        },
+        {
+          "type": "seekbar",
+          "key": "opacity",
+          "title": "背景不透明度 %",
+          "default_value": 96,
+          "min": 35,
+          "max": 100
+        },
+        {
+          "type": "seekbar",
+          "key": "offset_ms",
+          "title": "逐字高亮偏移 ms",
+          "default_value": 0,
+          "min": -2000,
+          "max": 2000
+        },
+        {
+          "type": "switch",
+          "key": "lyric_cover_color",
+          "title": "歌词高亮与辉光使用封面颜色",
+          "default_value": false,
+          "summary": "从本地音频内嵌封面或同目录 cover/folder 图片取色，无封面时使用默认颜色。"
+        },
+        {
+          "type": "switch",
+          "key": "background_cover_color",
+          "title": "背景使用封面颜色",
+          "default_value": true,
+          "summary": "从本地音频内嵌封面或同目录 cover/folder 图片取色，无封面时使用默认颜色。"
+        },
+        {
+          "type": "list",
+          "key": "background_progress",
+          "title": "背景播放进度样式",
+          "entries": [
+            "关闭",
+            "背景注水",
+            "边缘细线"
+          ],
+          "entry_values": [
+            "off",
+            "fill",
+            "top_line"
+          ],
+          "default_value": "off",
+          "summary": "胶囊沿顶部、刘海沿底部显示细线；开始隐藏或展开控件时淡出，恢复稳定收起状态后淡入，低性能模式下关闭。"
+        },
+        {
+          "type": "switch",
+          "key": "spectrum_cover_color",
+          "title": "频谱使用封面颜色",
+          "default_value": true,
+          "summary": "从本地音频内嵌封面或同目录 cover/folder 图片取色，无封面时使用默认颜色。"
+        },
+        {
+          "type": "switch",
+          "key": "spout_enabled",
+          "title": "OBS / Spout2 输出",
+          "default_value": true,
+          "summary": "独立透明画面；桌面隐藏或全屏时继续显示。OBS 需要 Spout2 Capture 接收插件。"
+        },
+        {
+          "type": "edittext",
+          "key": "spout_name",
+          "title": "Spout2 发送器名称",
+          "default_value": "SPW Lyrics Island",
+          "summary": "使用英文、数字或空格；修改后在 OBS 重新选择发送器。"
+        },
+        {
+          "type": "list",
+          "key": "spout_fps",
+          "title": "Spout2 帧率",
+          "entries": [
+            "30 FPS",
+            "60 FPS"
+          ],
+          "entry_values": [
+            "30",
+            "60"
+          ],
+          "default_value": "30",
+          "summary": "低性能模式固定约 15 FPS。选项可选 30 FPS / 60 FPS。"
+        },
+        {
+          "type": "edittext",
+          "key": "spout_width",
+          "title": "Spout2 画布宽度",
+          "default_value": "1280",
+          "summary": "320–3840 像素，固定画布，词岛居中。"
+        },
+        {
+          "type": "edittext",
+          "key": "spout_height",
+          "title": "Spout2 画布高度",
+          "default_value": "512",
+          "summary": "128–2160 像素，保留透明背景。"
+        },
+        {
+          "type": "edittext",
+          "key": "spout_adapter",
+          "title": "Spout2 显卡编号",
+          "default_value": "-1",
+          "summary": "-1 自动，0 为第一张 DXGI 显卡。必须与 OBS 使用同一张显卡；出错后重新开关输出。"
+        },
+        {
+          "type": "button",
+          "title": "重置设置",
+          "summary": "将所有词岛设置、字体和位置恢复为默认值；设置页中的数值可能需要重新打开后才会更新。",
+          "arrow_type": "none",
+          "on_click": "io.github.gaboron.spwisland.host.IslandPlugin.resetSettings"
+        },
+        {
+          "type": "button",
+          "title": "找回词岛",
+          "summary": "显示词岛、解除鼠标穿透并回到主屏幕顶部。",
+          "arrow_type": "none",
+          "on_click": "io.github.gaboron.spwisland.host.IslandPlugin.recover"
+        },
+        {
+          "type": "button",
+          "title": "原创署名与许可证（Lyricify / AMLL）",
+          "summary": "Lyricify：CC BY-SA 4.0；AMLL 动画模块：AGPL-3.0；其他程序：GPL-3.0。",
+          "arrow_type": "none",
+          "on_click": "io.github.gaboron.spwisland.host.IslandPlugin.about"
+        },
+        {
+          "type": "button",
+          "title": "项目源代码（GitHub）",
+          "summary": "查看源代码、反馈问题与参与贡献。",
+          "arrow_type": "link",
+          "on_click": "io.github.gaboron.spwisland.host.IslandPlugin.openSource"
+        }
+      ]
+    }
+  ]
+}
