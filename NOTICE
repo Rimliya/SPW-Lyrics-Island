@@ -1,0 +1,93 @@
+灵动词岛 for SPW
+Copyright (C) 2026 GaBoron
+
+Dynamic Lyrics Island / 灵动词岛 was created by Lyricify, WXRIW (XY Wang).
+Original concept published in Lyricify 3.8.1-release, created 2022-09-30.
+Source and attribution statement:
+https://github.com/WXRIW/Lyricify-App#lyricify-原创
+The original creator licenses this creation under CC BY-SA 4.0:
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Changes in this independent adaptation: integration with SPW playback callbacks;
+new Kotlin/Java2D rendering, animation, controls, timeline interpolation,
+configuration, screen placement and Windows window behavior. The visual and
+interaction adaptation is shared under CC BY-SA 4.0. No Lyricify application
+binaries, logos, screenshots or private source code are included in this plugin.
+This project is not affiliated with, sponsored by or endorsed by Lyricify or WXRIW.
+
+New program code is licensed under GPL-3.0-only (see LICENSE). GPLv3 is a
+BY-SA 4.0 Compatible License for adaptations; this does not relicense the
+original Lyricify creation or remove its attribution and CC BY-SA obligations.
+https://creativecommons.org/compatible-licenses/
+
+SPW Workshop API and example build layout
+Copyright (C) 2025 Moriafly
+https://github.com/Moriafly/spw-workshop-api
+Licensed under the Apache License, Version 2.0.
+API dependency: 0.1.0-dev23, provided by the host, not bundled.
+Build layout adapted for this plugin; no API implementation is vendored.
+
+The Gradle wrapper is from the SPW Workshop API repository (tag 0.1.0-dev20),
+copyright its respective Gradle contributors, Apache-2.0.
+Wrapper configuration changed to Gradle 9.8.0 with distribution SHA-256 checking.
+
+See THIRD_PARTY_NOTICES.md and licenses/ for dependency licenses.
+Keep this attribution and all applicable license notices when redistributing.
+
+Apple Music-like Lyrics (AMLL)
+Copyright its respective AMLL contributors (including Steve-xmh).
+https://github.com/amll-dev/applemusic-like-lyrics
+Source revision: 58ccd3ffae7ec4e9a6d1cdb0dd88ac8c767f68a8
+Original: packages/core/src/lyric-player/dom/lyric-line.ts
+License: GNU Affero General Public License, version 3 (licenses/AGPL-3.0.txt).
+Modified 2026-09-04 by GaBoron: ported float and per-character emphasis curves,
+duration scaling and terminal-word emphasis to Kotlin AmllMotion.kt. Java2D
+glyph rendering, gradient highlighting and the damped line spring integrate the
+port into a single-line SPW island; no AMLL DOM, WebGL or spring library is bundled.
+Other original program files retain their
+GPL-3.0-only notices. The combined program is conveyed under the linking and
+combination permissions in section 13 of GPLv3 and AGPLv3; both licenses and
+the complete corresponding source accompany every plugin distribution.
+This does not change the original Lyricify CC BY-SA 4.0 attribution or license.
+No warranty is provided, to the extent permitted by applicable law.
+
+AndroidLiquidGlass / Backdrop
+Copyright 2025 Kyant
+https://github.com/Kyant0/AndroidLiquidGlass
+Source revision: 65ab177e90e5c1d8c62e70cf7755841982da65f6
+Original: backdrop/src/commonMain/kotlin/com/kyant/backdrop/internal/Shaders.kt
+Also adapted: effects/ColorFilter.kt, highlight/HighlightModifier.kt,
+highlight/HighlightStyle.kt and catalog/components/LiquidButton.kt.
+Licensed under the Apache License, Version 2.0 (licenses/Apache-2.0.txt).
+Modified 2026-10-15: ported the Lens, seven-sample chromatic dispersion and
+Default Highlight programs to ui/gpu/IslandGlassShaders.kt. Reproduced the
+Vibrancy -> Blur -> Lens order and separate clipped, blurred PLUS highlight
+in IslandGlassImage.kt and IslandGlassHighlight.kt. Real Windows desktop
+crops replace the Compose backdrop; segment distances and original Path
+coverage replace the rounded-rect SDF/normal. Dispersion is limited, lighting
+is upper-left with a weaker back-lit side, and tiny collapsing contours cap
+the lens dimensions. No Compose components are incorporated.
+
+Jaudiotagger 3.0.1, Copyright Paul Taylor and contributors.
+https://www.jthink.net/jaudiotagger/
+Unmodified library under LGPL-2.1-or-later (licenses/LGPL-2.1.txt).
+Used only for local metadata reading. The replaceable library JAR is in lib/;
+its corresponding upstream source JAR is included in source/.
+
+MiSans VF, Copyright Xiaomi.
+https://hyperos.mi.com/font
+Bundled for plugin UI text, both Windows right-click menus, the font picker
+preview, and the optional built-in MiSans lyric font.
+License terms accompany the distribution in licenses/MiSans-License.pdf.
+
+PingFang-style lyric font (PingFang.ttc), provided by the fork maintainer.
+Bundled as the default lyric font. Source and usage terms are recorded in
+licenses/PingFang-NOTICE.txt.
+
+Combined SPW Lyrics Island distribution
+SPW Lyrics module Copyright (C) 2026 GaBoron, licensed under the MIT License.
+The MIT text is preserved at licenses/SPW-Lyrics-MIT.txt.
+The combined work integrates the GPL-3.0-only island program with the MIT-licensed
+lyrics module. The combined distribution is provided under GPL-3.0-only while the
+SPW Lyrics module and its original files remain available under MIT.
+No upstream copyright, attribution, or license notice is removed by this combination.
