@@ -12,6 +12,11 @@ if (-not $Path) {
 }
 if (-not (Test-Path -LiteralPath $Path)) { throw "Package not found: $Path" }
 
+$versionLine = Get-Content (Join-Path $root "gradle.properties") |
+    Where-Object { $_ -match '^version=(.+)$' } | Select-Object -First 1
+if (-not $versionLine) { throw "version is missing from gradle.properties" }
+$version = [regex]::Match($versionLine, '^version=(.+)$').Groups[1].Value.Trim()
+
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $Path).Path)
 try {
@@ -26,31 +31,44 @@ try {
         try { return $reader.ReadToEnd() } finally { $reader.Dispose(); $stream.Dispose() }
     }
 
-    $preferences = Read-Entry "preference_config.json" | ConvertFrom-Json
+    $preferences = Read-Entry "classes/preference_config.json" | ConvertFrom-Json
     $configNames = @($preferences.configs | ForEach-Object { $_.config })
     foreach ($required in @("island.json", "spw-lyrics.json")) {
         if ($configNames -notcontains $required) { throw "Merged preferences are missing $required" }
     }
 
     $extensionClass = "io.github.gaboron.spwlyricsisland.SPWLyricsIslandPlaybackExtension"
-    $extensionIndex = (Read-Entry "META-INF/extensions.idx").Trim()
+    $extensionIndex = (Read-Entry "classes/META-INF/extensions.idx").Trim()
     if ($extensionIndex -ne $extensionClass) {
         throw "Unexpected extensions.idx: $extensionIndex"
     }
 
-    $sourceProperties = Read-Entry "project.properties"
+    $manifest = Read-Entry "classes/META-INF/MANIFEST.MF"
+    $expectedManifest = [ordered]@{
+        "Plugin-Class" = "io.github.gaboron.spwlyricsisland.SPWLyricsIslandPlugin"
+        "Plugin-Id" = "io.github.gaboron.spwlyricsisland"
+        "Plugin-Version" = $version
+        "Plugin-Provider" = "GaBoron / Solitaire"
+        "Plugin-Open-Source-Url" = "https://github.com/Rimliya/SPW-Lyrics-Island"
+    }
+    foreach ($key in $expectedManifest.Keys) {
+        $pattern = "(?m)^$([regex]::Escape($key)): $([regex]::Escape($expectedManifest[$key]))\r?$"
+        if ($manifest -notmatch $pattern) { throw "Manifest does not contain $key=$($expectedManifest[$key])" }
+    }
+
+    $sourceProperties = Read-Entry "classes/project.properties"
     if ($sourceProperties -notmatch "source\.url=https://github\.com/Rimliya/SPW-Lyrics-Island") {
         throw "project.properties does not point at the combined repository"
     }
 
     $requiredEntries = @(
-        "fonts/PingFang.ttc",
-        "fonts/MiSansVF.ttf",
-        "native/spw-spectrum.exe",
-        "native/spw-island-tray.exe",
-        "native/spw-spout.dll",
-        "native/spw-island-glass.dll",
-        "native/compose/skiko-windows-x64.dll"
+        "classes/fonts/PingFang.ttc",
+        "classes/fonts/MiSansVF.ttf",
+        "classes/native/spw-spectrum.exe",
+        "classes/native/spw-island-tray.exe",
+        "classes/native/spw-spout.dll",
+        "classes/native/spw-island-glass.dll",
+        "classes/native/compose/skiko-windows-x64.dll"
     )
     foreach ($required in $requiredEntries) {
         if (-not $entries.ContainsKey($required)) { throw "Missing package entry: $required" }
@@ -62,15 +80,11 @@ try {
         throw "Source archive is missing from the package"
     }
 
-    $metadata = @($entries.Keys | Where-Object {
-        $_ -match '(^|/)plugin\.(properties|json)$' -or $_ -eq 'META-INF/MANIFEST.MF'
-    })
-    foreach ($name in $metadata) {
-        Write-Host "--- $name ---"
-        Write-Host (Read-Entry $name)
-    }
-
-    Write-Host "PASS: $Path contains merged settings, one extension adapter, fonts, native outputs, libraries, and source archive."
+    Write-Host "PASS: $Path"
+    Write-Host "  version: $version"
+    Write-Host "  settings: $($configNames -join ', ')"
+    Write-Host "  extension: $extensionClass"
+    Write-Host "  runtime libraries: $($libraries.Count)"
 } finally {
     $archive.Dispose()
 }
