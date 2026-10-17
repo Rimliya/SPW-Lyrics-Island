@@ -110,6 +110,11 @@ tasks.processResources {
     filesMatching("project.properties") { expand("projectUrl" to projectUrl.get()) }
 }
 
+tasks.test {
+    // The island verification programs are JavaExec entry points, not JUnit tests.
+    failOnNoDiscoveredTests = false
+}
+
 tasks.register<JavaExec>("spoutChecks") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
