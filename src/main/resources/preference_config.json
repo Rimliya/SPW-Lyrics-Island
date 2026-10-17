@@ -1,0 +1,49 @@
+{
+  "configs": [
+    {
+      "title": "SPW Lyrics",
+      "config": "spw-lyrics.json",
+      "preferences": [
+        {
+          "key": "automatic_replacement_policy",
+          "type": "list",
+          "title": "自动替换歌词",
+          "summary": "控制插件何时搜索并替换 SPW 本地歌词",
+          "entries": ["始终优先使用插件歌词", "仅在本地无歌词时补充", "仅手动选择时替换"],
+          "entry_values": ["always", "when_local_missing", "manual_only"],
+          "default_value": "always"
+        },
+        {
+          "key": "similarity_level",
+          "type": "list",
+          "title": "歌词相似度校验",
+          "summary": "自动替换前先与本地歌词逐行比对，避免匹配到别的歌；严格模式下要求更高",
+          "entries": ["严格", "标准", "关闭"],
+          "entry_values": ["strict", "standard", "off"],
+          "default_value": "standard"
+        },
+        {
+          "type": "button",
+          "title": "打开手动搜索",
+          "summary": "无需快捷键，直接打开当前歌曲的手动搜索窗口",
+          "arrow_type": "none",
+          "on_click": "dev.gaboron.spwlyrics.integration.SpwLyricsActions.openManualSearch"
+        },
+        {
+          "type": "button",
+          "title": "批量处理音乐库",
+          "summary": "提前搜索并缓存音乐库歌词，首次播放时无需逐首等待",
+          "arrow_type": "none",
+          "on_click": "dev.gaboron.spwlyrics.integration.SpwLyricsActions.openBatchProcessing"
+        },
+        {
+          "type": "button",
+          "title": "查看本地缓存文件夹",
+          "summary": "在文件资源管理器中打开已缓存的歌词",
+          "arrow_type": "none",
+          "on_click": "dev.gaboron.spwlyrics.integration.SpwLyricsActions.openCacheFolder"
+        }
+      ]
+    }
+  ]
+}
