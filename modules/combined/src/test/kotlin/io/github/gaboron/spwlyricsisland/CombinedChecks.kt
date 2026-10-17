@@ -33,6 +33,7 @@ fun main() {
 }
 
 private fun resource(name: String): String =
-    checkNotNull(CombinedChecksKt::class.java.getResourceAsStream(name)) { "Missing resource: $name" }
+    checkNotNull(ResourceAnchor::class.java.getResourceAsStream(name)) { "Missing resource: $name" }
         .bufferedReader()
         .use { it.readText() }
+private object ResourceAnchor

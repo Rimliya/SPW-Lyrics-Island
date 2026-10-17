@@ -59,6 +59,8 @@ dependencies {
 
     metadataSources("net.jthink:jaudiotagger:3.0.1:sources")
     testImplementation(kotlin("stdlib"))
+    testImplementation(workshop) { isTransitive = false }
+    testImplementation("org.pf4j:pf4j:3.12.0")
 }
 
 val preferenceSources = listOf(
