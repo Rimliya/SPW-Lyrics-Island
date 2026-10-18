@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "dev.gaboron.spwlyrics"
-version = "1.1.1-d.1"
+version = "1.1.2-a.1"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25

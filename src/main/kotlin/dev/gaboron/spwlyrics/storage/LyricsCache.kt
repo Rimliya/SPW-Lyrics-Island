@@ -11,6 +11,7 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.BasicFileAttributes
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -57,6 +58,10 @@ class FileLyricsCache(
     private val memory = object : LinkedHashMap<String, CachedLyrics>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedLyrics>?): Boolean = size > 64
     }
+    private val overrides = object : LinkedHashMap<OverrideKey, ManualOverride?>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<OverrideKey, ManualOverride?>?): Boolean =
+            size > 64
+    }
 
     init {
         Files.createDirectories(root)
@@ -84,21 +89,41 @@ class FileLyricsCache(
     }
 
     @Synchronized
-    override fun getOverride(query: TrackQuery): ManualOverride? = read(layout.override(query))
-        ?.let { runCatching { json.decodeFromString<ManualOverride>(it) }.getOrNull() }
-        ?.takeIf { it.modelVersion == MANUAL_OVERRIDE_MODEL_VERSION }
+    override fun getOverride(query: TrackQuery): ManualOverride? {
+        val path = layout.override(query)
+        val key = OverrideKey(query.key, stamp(path))
+        if (overrides.containsKey(key)) return overrides[key]
+        val stored = read(path)
+            ?.let { runCatching { json.decodeFromString<ManualOverride>(it) }.getOrNull() }
+            ?.takeIf { it.modelVersion == MANUAL_OVERRIDE_MODEL_VERSION }
+        overrides[key] = stored
+        return stored
+    }
 
     @Synchronized
     override fun putOverride(query: TrackQuery, override: ManualOverride) {
         write(layout.override(query), json.encodeToString(override))
+        invalidateOverrides(query)
         memory.remove(query.key)
     }
 
     @Synchronized
     override fun removeOverride(query: TrackQuery) {
         Files.deleteIfExists(layout.override(query))
+        invalidateOverrides(query)
         memory.remove(query.key)
     }
+
+    private fun invalidateOverrides(query: TrackQuery) {
+        val iterator = overrides.keys.iterator()
+        while (iterator.hasNext()) if (iterator.next().query == query.key) iterator.remove()
+    }
+
+    private fun stamp(path: Path): FileStamp? = runCatching {
+        Files.readAttributes(path, BasicFileAttributes::class.java)
+            .takeIf { it.isRegularFile }
+            ?.let { FileStamp(it.size(), it.lastModifiedTime().toMillis()) }
+    }.getOrNull()
 
     private fun validLyrics(value: CachedLyrics): Boolean =
         value.modelVersion == LYRICS_CACHE_MODEL_VERSION && value.encoderVersion == SpwLyricsEncoder.VERSION &&
@@ -124,4 +149,7 @@ class FileLyricsCache(
             Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING)
         }
     }
+
+    private data class FileStamp(val size: Long, val modifiedMs: Long)
+    private data class OverrideKey(val query: String, val stamp: FileStamp?)
 }
