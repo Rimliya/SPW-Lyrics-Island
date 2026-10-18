@@ -44,8 +44,8 @@ src/main/resources ← 单一插件清单、合并后的设置页
 
 | 模块 | 来源 | 记录版本 | 提交 |
 | --- | --- | --- | --- |
-| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.0.1-gpu.1` | `6604b77` |
-| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `1.1.1-d.1` | `4d7170c` |
+| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.0.1-gpu.2` | `4b34d74` |
+| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `1.1.2-d.1` | `09bafa2` |
 
 原始项目：[GaBoron/SPW-island](https://github.com/GaBoron/SPW-island)、[GaBoron/SPW-Lyrics](https://github.com/GaBoron/SPW-Lyrics)。
 
