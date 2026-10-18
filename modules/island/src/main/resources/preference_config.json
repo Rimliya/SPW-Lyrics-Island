@@ -191,32 +191,6 @@
           "max": 72
         },
         {
-          "type": "list",
-          "key": "leading_content",
-          "title": "左侧插槽",
-          "entries": [
-            "专辑封面",
-            "实时频谱",
-            "不显示"
-          ],
-          "entry_values": [
-            "cover",
-            "spectrum",
-            "none"
-          ],
-          "default_value": "cover",
-          "summary": "封面来自本地音频内嵌图片或同目录 cover/folder 图片。"
-        },
-        {
-          "type": "list",
-          "key": "trailing_content",
-          "title": "右侧插槽",
-          "entries": ["播放状态", "频谱", "时钟", "不显示"],
-          "entry_values": ["status", "spectrum", "clock", "none"],
-          "default_value": "spectrum",
-          "summary": "频谱只使用右侧四柱或右侧五柱布局；底部布局在歌词区底边绘制。"
-        },
-        {
           "type": "switch",
           "key": "cover_visible",
           "title": "显示封面",
@@ -231,13 +205,6 @@
           "max": 160
         },
         {
-          "type": "switch",
-          "key": "cover_vinyl",
-          "title": "封面黑胶环",
-          "default_value": false,
-          "summary": "在封面后绘制深色唱片环与细纹。"
-        },
-        {
           "type": "list",
           "key": "background_style",
           "title": "背景样式（Windows）",
@@ -250,7 +217,7 @@
             "liquid_glass"
           ],
           "default_value": "classic",
-          "summary": "液态玻璃使用实时桌面模糊、边缘折射、轻微色散与方向高光，需要 Windows 11 及 SDR 显示器。背景不取封面颜色；不透明度调节中性基底。启用时词岛从系统录屏中排除；低性能或捕获不可用时使用经典背景，原因见关于窗口。"
+          "summary": "液态玻璃使用实时桌面模糊、边缘折射、轻微色散与方向高光，需要 Windows 11 及 SDR 显示器。背景不取封面颜色；不透明度调节中性基底。启用时词岛从系统录屏中排除；低性能或捕获不可用时使用经典背景，原因见关于窗口。液态玻璃与“经典背景材质”互斥：启用液态玻璃时，纯色、渐变、流光和迷彩均不会绘制或叠加；切回经典背景后材质设置才生效。"
         },
         {
           "type": "list",
@@ -259,7 +226,7 @@
           "entries": ["纯色", "线性渐变", "多色流光", "封面迷彩碎色"],
           "entry_values": ["solid", "gradient", "flow", "mosaic"],
           "default_value": "solid",
-          "summary": "仅经典背景生效；液态玻璃保持自身表面。流光与迷彩使用封面多色调色板。"
+          "summary": "仅经典背景生效；选择液态玻璃时该材质完全不绘制，两套背景不会叠加。流光与迷彩使用封面多色调色板。"
         },
         {
           "type": "seekbar",
@@ -308,21 +275,6 @@
           "max": 100
         },
         {
-          "type": "seekbar",
-          "key": "offset_ms",
-          "title": "逐字高亮偏移 ms",
-          "default_value": 0,
-          "min": -2000,
-          "max": 2000
-        },
-        {
-          "type": "switch",
-          "key": "lyric_cover_color",
-          "title": "歌词高亮与辉光使用封面颜色",
-          "default_value": false,
-          "summary": "从本地音频内嵌封面或同目录 cover/folder 图片取色，无封面时使用默认颜色。"
-        },
-        {
           "type": "switch",
           "key": "background_cover_color",
           "title": "背景使用封面颜色",
@@ -345,6 +297,32 @@
           ],
           "default_value": "off",
           "summary": "胶囊沿顶部、刘海沿底部显示细线；开始隐藏或展开控件时淡出，恢复稳定收起状态后淡入，低性能模式下关闭。"
+        },
+        {
+          "type": "list",
+          "key": "leading_content",
+          "title": "左侧插槽",
+          "entries": [
+            "专辑封面",
+            "实时频谱",
+            "不显示"
+          ],
+          "entry_values": [
+            "cover",
+            "spectrum",
+            "none"
+          ],
+          "default_value": "cover",
+          "summary": "封面来自本地音频内嵌图片或同目录 cover/folder 图片。"
+        },
+        {
+          "type": "list",
+          "key": "trailing_content",
+          "title": "右侧插槽",
+          "entries": ["播放状态", "频谱", "时钟", "不显示"],
+          "entry_values": ["status", "spectrum", "clock", "none"],
+          "default_value": "spectrum",
+          "summary": "频谱只使用右侧四柱或右侧五柱布局；底部布局在歌词区底边绘制。"
         },
         {
           "type": "list",
@@ -405,6 +383,21 @@
           "entries": ["文本", "七段数码管", "点阵", "像素风"],
           "entry_values": ["text", "seven", "dot", "pixel"],
           "default_value": "dot"
+        },
+        {
+          "type": "seekbar",
+          "key": "offset_ms",
+          "title": "逐字高亮偏移 ms",
+          "default_value": 0,
+          "min": -2000,
+          "max": 2000
+        },
+        {
+          "type": "switch",
+          "key": "lyric_cover_color",
+          "title": "歌词高亮与辉光使用封面颜色",
+          "default_value": false,
+          "summary": "从本地音频内嵌封面或同目录 cover/folder 图片取色，无封面时使用默认颜色。"
         },
         {
           "type": "switch",
