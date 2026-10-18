@@ -4,6 +4,8 @@ import dev.gaboron.spwlyrics.application.LocalTtmlConversion
 import dev.gaboron.spwlyrics.domain.LyricsDocument
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.BasicFileAttributes
+import java.util.LinkedHashMap
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.Tag
@@ -16,17 +18,40 @@ import org.jaudiotagger.tag.id3.framebody.FrameBodyUSLT
 internal class LocalTtmlLyricsLoader(
     private val conversion: LocalTtmlConversion = LocalTtmlConversion(),
 ) {
+    private val cache = object : LinkedHashMap<CacheKey, LyricsDocument?>(MAX_CACHE_ENTRIES, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<CacheKey, LyricsDocument?>?): Boolean =
+            size > MAX_CACHE_ENTRIES
+    }
+
     fun load(audioPath: String): LyricsDocument? = runCatching {
-        val audio = Path.of(audioPath)
-        if (!Files.isRegularFile(audio)) return null
-        val stem = audio.fileName.toString().substringBeforeLast('.', audio.fileName.toString())
+        val audio = Path.of(audioPath).toAbsolutePath().normalize()
+        val name = audio.fileName?.toString() ?: return null
+        val stem = name.substringBeforeLast('.', name)
         val lrc = audio.resolveSibling("$stem.lrc")
+        val ttml = audio.resolveSibling("$stem.ttml")
+        val key = CacheKey(audio, stamp(audio), stamp(lrc), stamp(ttml))
+        synchronized(cache) {
+            if (cache.containsKey(key)) return cache[key]
+        }
+        val document = read(audio, lrc, ttml)
+        synchronized(cache) { cache[key] = document }
+        document
+    }.getOrNull()
+
+    private fun read(audio: Path, lrc: Path, ttml: Path): LyricsDocument? {
+        if (!Files.isRegularFile(audio)) return null
         if (Files.isRegularFile(lrc)) return readSidecar(lrc)?.let(conversion::parse)
 
         val embedded = readEmbedded(audio)
         if (embedded != null) return conversion.parse(embedded)
 
-        readSidecar(audio.resolveSibling("$stem.ttml"))?.let(conversion::parse)
+        return readSidecar(ttml)?.let(conversion::parse)
+    }
+
+    private fun stamp(path: Path): FileStamp? = runCatching {
+        Files.readAttributes(path, BasicFileAttributes::class.java)
+            .takeIf { it.isRegularFile }
+            ?.let { FileStamp(it.size(), it.lastModifiedTime().toMillis()) }
     }.getOrNull()
 
     private fun readSidecar(path: Path): String? = runCatching {
@@ -58,7 +83,16 @@ internal class LocalTtmlLyricsLoader(
     }
 
     private companion object {
+        const val MAX_CACHE_ENTRIES = 8
         const val MAX_SIDECAR_BYTES = 4_000_000L
         val LYRIC_TAGS = setOf("LYRICS", "UNSYNCEDLYRICS", "SYNCEDLYRICS", "TTMLLYRIC")
     }
+
+    private data class FileStamp(val size: Long, val modifiedMs: Long)
+    private data class CacheKey(
+        val audio: Path,
+        val audioStamp: FileStamp?,
+        val lrcStamp: FileStamp?,
+        val ttmlStamp: FileStamp?,
+    )
 }
