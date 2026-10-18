@@ -49,8 +49,8 @@ try {
     if (@($preferences.configs | ForEach-Object config) -notcontains "spw-lyrics.json") {
         throw "spw-lyrics.json is missing from preference_config.json"
     }
-    if (-not $entries.ContainsKey("classes/native/compose/skiko-windows-x64.dll")) {
-        throw "Skiko native runtime is missing"
+    if (@($entries.Keys | Where-Object { $_ -like "classes/native/compose/*" }).Count) {
+        throw "Package must not bundle the host-provided Compose/Skiko native runtime"
     }
 
     $libraries = @($entries.Keys | Where-Object { $_ -match "^lib/.+\.jar$" })
