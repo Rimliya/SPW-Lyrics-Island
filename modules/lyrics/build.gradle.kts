@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "dev.gaboron.spwlyrics"
-version = "1.1.2-a.1"
+version = "1.1.2-c.1"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25
@@ -37,6 +37,14 @@ dependencies {
     implementation("com.github.houbb:opencc4j:1.14.0")
     implementation("net.jthink:jaudiotagger:3.0.1")
     implementation(compose.desktop.currentOs)
+
+    testImplementation(kotlin("test"))
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 tasks.processResources {

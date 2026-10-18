@@ -72,6 +72,7 @@ class LyricsResolver(
         completionDeadlineNanos: Long = Long.MAX_VALUE,
     ): ResolvedLyrics? {
         val selected = orderedSources.filter { it != LyricsSource.LOCAL }.mapNotNull(providers::get)
+        val preparedReference = LyricsSimilarity.prepare(reference)
         onProgress(LyricsResolutionProgress(LyricsResolutionStage.SEARCHING, 0.04, "开始并行搜索 ${selected.size} 个歌词来源"))
         val completed = providerTasks.collectProgressively(
             tasks = selected.map { provider ->
@@ -81,7 +82,7 @@ class LyricsResolver(
                         query,
                         System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(PROVIDER_SEARCH_BUDGET_MILLIS),
                         minimumQuality,
-                        reference,
+                        preparedReference,
                         similarity,
                     )
                 }
@@ -135,8 +136,9 @@ class LyricsResolver(
             val provider = selected[result.index]
             result.value.map { ManualCandidateRequest(provider, it) }
         }
+        val preparedQuery = MatchEngine.prepare(query)
         return manualCandidateInspector.inspect(requests)
-            .map { MatchEngine.score(query, it) }
+            .map { MatchEngine.score(preparedQuery, it) }
             .sortedWith(
                 compareByDescending<CandidateScore> { it.candidate.qualityHint?.rank ?: -1 }
                     .thenBy { it.candidate.source.priority }
@@ -190,7 +192,7 @@ class LyricsResolver(
         query: TrackQuery,
         deadlineNanos: Long,
         minimumQuality: LyricsQuality,
-        reference: LyricsDocument?,
+        reference: LyricsSimilarity.Reference?,
         similarity: LyricsSimilarity.Level,
     ): FetchedLyrics? {
         val winner = findWinner(provider, query, deadlineNanos) ?: return null
@@ -216,13 +218,15 @@ class LyricsResolver(
         accepts: (CandidateScore) -> Boolean = PreferredSourceMatchPolicy::accepts,
     ): LyricsCandidate? {
         val candidates = linkedMapOf<String, LyricsCandidate>()
+        val preparedQuery = MatchEngine.prepare(query)
+        val scoreCache = HashMap<String, CandidateScore>()
         for (keywords in provider.automaticSearchQueries(query)) {
             if (System.nanoTime() >= deadlineNanos) break
             search(provider, query, keywords).forEach { candidates.putIfAbsent(it.remoteId, it) }
-            MatchEngine.decide(query, candidates.values.toList(), accepts)
+            MatchEngine.decide(preparedQuery, candidates.values.toList(), accepts, scoreCache)
                 .winner?.candidate?.let { return it }
         }
-        return MatchEngine.decide(query, candidates.values.toList(), accepts).winner?.candidate
+        return MatchEngine.decide(preparedQuery, candidates.values.toList(), accepts, scoreCache).winner?.candidate
     }
 
     private companion object {
