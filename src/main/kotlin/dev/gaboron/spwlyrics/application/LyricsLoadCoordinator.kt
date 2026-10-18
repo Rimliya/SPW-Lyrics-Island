@@ -56,8 +56,8 @@ class LyricsLoadCoordinator(
             local = if (override?.candidate == null) localTtml?.invoke() else null
             localLyrics.set(local?.let { query.key to it })
         } else if (override?.candidate == null) {
-            // Native acceptance returns null to SPW, which may still call its after-missing hook.
-            local = localLyrics.get()?.takeIf { it.first == query.key }?.second
+            // Reuse the local TTML document if SPW also invokes its after-missing hook.
+            localLyrics.get()?.takeIf { it.first == query.key }?.let { return render(query, it.second) }
         }
         if (override?.local == true) return null
         val automaticLoadAllowed = replacementPolicy.allowsAutomaticLoad(phase)
