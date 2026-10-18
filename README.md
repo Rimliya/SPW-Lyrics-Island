@@ -3,6 +3,7 @@
 将 **灵动词岛** 与 **SPW Lyrics** 合并为一个 `.spmod`：歌词岛负责显示，SPW Lyrics 负责从多个来源搜索、匹配、缓存并刷新逐字歌词。
 
 > 插件作者元数据：`GaBoron / Solitaire`。本项目是基于两个上游模块的合并发行版，Windows x64 专用，保留 OBS Spout2 透明输出。
+> 当前 `gpu-experimental` 分支使用 GPU 实验版词岛模块（Spout2 直接复用 Skia GPU 帧），其余组合逻辑与 `main` 相同。
 
 <p align="center">
   <a href="https://github.com/Rimliya/SPW-Lyrics-Island/releases/latest"><img src="https://img.shields.io/github/v/release/Rimliya/SPW-Lyrics-Island?label=Release" alt="Release"></a>
@@ -43,7 +44,7 @@ src/main/resources ← 单一插件清单、合并后的设置页
 
 | 模块 | 来源 | 记录版本 | 提交 |
 | --- | --- | --- | --- |
-| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.0.0-spout.4` | `369c093` |
+| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.0.1-gpu.1` | `6604b77` |
 | `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `1.1.1-d.1` | `4d7170c` |
 
 原始项目：[GaBoron/SPW-island](https://github.com/GaBoron/SPW-island)、[GaBoron/SPW-Lyrics](https://github.com/GaBoron/SPW-Lyrics)。
