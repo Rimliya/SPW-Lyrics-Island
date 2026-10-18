@@ -5,6 +5,7 @@ import java.text.Normalizer
 import kotlin.math.max
 
 object TextNormalizer {
+    private val whitespaceRegex = Regex("\\s+")
     private val versionRegex = Regex(
         """(?i)(official\s*(video|audio|mv)|lyrics?\s*video|live|现场版?|remix|remaster(?:ed)?|acoustic|cover|instrumental|inst\.?|off\s*vocal|karaoke|伴奏|纯音乐|翻唱|完整版|radio\s*edit|sped\s*up|slowed)""",
     )
@@ -20,16 +21,16 @@ object TextNormalizer {
         .replace(bracketRegex, " ")
         .replace(punctuationRegex, " ")
         .trim()
-        .replace(Regex("\\s+"), " ")
+        .replace(whitespaceRegex, " ")
 
     fun compact(value: String): String = normalize(value).replace(" ", "")
 
     fun removeVersionNoise(value: String): String = versionRegex.replace(value, " ")
-        .replace(Regex("\\s+"), " ")
+        .replace(whitespaceRegex, " ")
 
     fun versionTokens(value: String): Set<String> = versionRegex.findAll(
         Normalizer.normalize(value, Normalizer.Form.NFKC).lowercase(),
-    ).map { it.value.replace(Regex("\\s+"), " ") }.toSet()
+    ).map { it.value.replace(whitespaceRegex, " ") }.toSet()
 
     fun splitArtists(value: String): List<String> = value.split(artistSplitRegex)
         .map(String::trim)

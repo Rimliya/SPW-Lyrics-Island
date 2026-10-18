@@ -40,6 +40,10 @@ class LyricsLoadCoordinator(
     private val qualityUpgradeInFlight = ConcurrentHashMap<String, CompletableFuture<*>>()
     private val qualityUpgradeAttempts = BackgroundAttemptGate(QUALITY_UPGRADE_RETRY_SECONDS)
     private val notifiedFailures = ConcurrentHashMap.newKeySet<String>()
+    private val renderCacheLock = Any()
+    private var renderedDocument: LyricsDocument? = null
+    private var renderedDelay = Int.MIN_VALUE
+    private var renderedLyrics: String? = null
 
     fun currentQuery(): TrackQuery? = current.get()
 
@@ -251,7 +255,17 @@ class LyricsLoadCoordinator(
     private fun render(query: TrackQuery, document: LyricsDocument, encoded: String? = null): String? {
         val delay = delays?.get(query) ?: 0
         if (output != null) return output.render(query, document, delay, encoded)
-        return if (delay == 0 && encoded != null) encoded else SpwLyricsEncoder.encode(document, delay)
+        if (delay == 0 && encoded != null) return encoded
+        synchronized(renderCacheLock) {
+            if (document === renderedDocument && delay == renderedDelay) renderedLyrics?.let { return it }
+        }
+        val result = SpwLyricsEncoder.encode(document, delay)
+        synchronized(renderCacheLock) {
+            renderedDocument = document
+            renderedDelay = delay
+            renderedLyrics = result
+        }
+        return result
     }
 
     private fun offer(query: TrackQuery, document: LyricsDocument) {
@@ -261,6 +275,10 @@ class LyricsLoadCoordinator(
     override fun close() {
         current.set(null)
         localLyrics.set(null)
+        synchronized(renderCacheLock) {
+            renderedDocument = null
+            renderedLyrics = null
+        }
         output?.close()
         activeAutomaticLoads.clear()
         inFlight.values.forEach { it.cancel(true) }
