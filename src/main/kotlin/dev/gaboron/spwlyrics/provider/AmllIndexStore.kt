@@ -39,10 +39,12 @@ internal class AmllIndexStore(
         val tokens = TextNormalizer.normalize(keywords).split(' ').filter { it.length >= 2 }.toSet()
         val ids = tokens.flatMap { inverted.orEmpty()[it].orEmpty() }.distinct()
         val pool = if (ids.isNotEmpty()) ids.mapNotNull(all::getOrNull) else emptyList()
+        val queryTitle = TextNormalizer.prepare(query.title)
+        val queryArtists = TextNormalizer.prepare(query.artists.joinToString(" "))
         return pool.asSequence()
             .sortedByDescending { record ->
-                TextNormalizer.similarity(query.title, record.title) * 0.7 +
-                    TextNormalizer.similarity(query.artists.joinToString(" "), record.artists.joinToString(" ")) * 0.3
+                TextNormalizer.similarity(queryTitle, record.titleText) * 0.7 +
+                    TextNormalizer.similarity(queryArtists, record.artistText) * 0.3
             }
             .take(limit)
             .map(AmllRecord::candidate)
@@ -90,19 +92,16 @@ internal class AmllIndexStore(
             emptyList()
         }
         records = loaded
-        inverted = buildMap {
-            loaded.forEachIndexed { index, record ->
-                val tokens = TextNormalizer.normalize(
-                    listOf(record.title, record.artists.joinToString(" "), record.album).joinToString(" "),
-                ).split(' ').filter { it.length >= 2 }.toSet()
-                tokens.forEach { token -> put(token, getOrDefault(token, emptySet()) + index) }
-            }
+        val invertedIndex = HashMap<String, MutableSet<Int>>()
+        loaded.forEachIndexed { index, record ->
+            record.searchTokens.forEach { token -> invertedIndex.getOrPut(token) { HashSet() }.add(index) }
         }
-        byExternalId = buildMap {
-            loaded.forEachIndexed { index, record ->
-                record.ids.values.flatten().forEach { id -> put(id, getOrDefault(id, emptySet()) + index) }
-            }
+        inverted = invertedIndex
+        val idIndex = HashMap<String, MutableSet<Int>>()
+        loaded.forEachIndexed { index, record ->
+            record.ids.values.flatten().forEach { id -> idIndex.getOrPut(id) { HashSet() }.add(index) }
         }
+        byExternalId = idIndex
     }
 
     private fun migrateLegacyIndex() {
@@ -153,6 +152,12 @@ private data class AmllRecord(
     val album: String,
     val ids: Map<String, List<String>>,
 ) {
+    val titleText: TextNormalizer.PreparedText = TextNormalizer.prepare(title)
+    val artistText: TextNormalizer.PreparedText = TextNormalizer.prepare(artists.joinToString(" "))
+    val albumText: TextNormalizer.PreparedText = TextNormalizer.prepare(album)
+    val searchTokens: Set<String> = (titleText.tokens + artistText.tokens + albumText.tokens)
+        .filterTo(HashSet()) { it.length >= 2 }
+
     fun candidate() = LyricsCandidate(
         source = LyricsSource.AMLL,
         remoteId = id,
