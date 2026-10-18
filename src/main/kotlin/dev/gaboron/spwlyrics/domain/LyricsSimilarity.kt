@@ -27,30 +27,57 @@ object LyricsSimilarity {
 
     data class Result(val coverage: Double, val comparable: Boolean)
 
-    fun compare(reference: LyricsDocument, candidate: LyricsDocument): Result {
-        val referenceLines = usableLines(reference)
+    /** Text prepared once and shared by every provider tried during one resolve. */
+    class Reference internal constructor(
+        internal val lines: List<TextNormalizer.PreparedText>,
+        internal val cjkShare: Double,
+        internal val comparable: Boolean,
+    )
+
+    fun prepare(document: LyricsDocument?): Reference? {
+        if (document == null) return null
+        val lines = usableLines(document)
+        val comparable = lines.size >= MIN_REFERENCE_LINES
+        return Reference(
+            lines = if (comparable) lines.map(TextNormalizer::prepare) else emptyList(),
+            cjkShare = cjkShare(lines),
+            comparable = comparable,
+        )
+    }
+
+    fun compare(reference: Reference, candidate: LyricsDocument): Result {
         val candidateLines = usableLines(candidate)
-        if (referenceLines.size < MIN_REFERENCE_LINES || candidateLines.size < MIN_REFERENCE_LINES) {
+        if (!reference.comparable || candidateLines.size < MIN_REFERENCE_LINES) {
             return Result(1.0, comparable = false)
         }
-        if (!sameScript(referenceLines, candidateLines)) return Result(1.0, comparable = false)
-        val referencePrepared = referenceLines.map(TextNormalizer::prepare)
+        if (!sameScript(reference.cjkShare, cjkShare(candidateLines))) return Result(1.0, comparable = false)
         val candidatePrepared = candidateLines.map(TextNormalizer::prepare)
         return Result(
-            maxOf(coverage(referencePrepared, candidatePrepared), coverage(candidatePrepared, referencePrepared)),
+            maxOf(coverage(reference.lines, candidatePrepared), coverage(candidatePrepared, reference.lines)),
             comparable = true,
         )
     }
 
+    fun compare(reference: LyricsDocument, candidate: LyricsDocument): Result {
+        val prepared = prepare(reference) ?: return Result(1.0, comparable = false)
+        return compare(prepared, candidate)
+    }
+
     /** A null reference means the track has no local lyrics to compare against. */
     fun accepts(
-        reference: LyricsDocument?,
+        reference: Reference?,
         candidate: LyricsDocument,
         level: Level = Level.STANDARD,
     ): Boolean {
         if (level == Level.OFF || reference == null) return true
         return compare(reference, candidate).let { !it.comparable || it.coverage >= level.rejectBelow }
     }
+
+    fun accepts(
+        reference: LyricsDocument?,
+        candidate: LyricsDocument,
+        level: Level = Level.STANDARD,
+    ): Boolean = accepts(prepare(reference), candidate, level)
 
     private fun usableLines(document: LyricsDocument): List<String> = document.lines.asSequence()
         .filterNot { it.background }
@@ -69,12 +96,11 @@ object LyricsSimilarity {
         source: List<TextNormalizer.PreparedText>,
         target: List<TextNormalizer.PreparedText>,
     ): Double = source.count { prepared ->
-        target.any { other -> TextNormalizer.similarity(prepared, other) >= LINE_MATCH }
+        target.any { other -> TextNormalizer.similarityAtLeast(prepared, other, LINE_MATCH) }
     }.toDouble() / source.size
 
     /** Translations, romaji and the original script cannot be compared line by line. */
-    private fun sameScript(left: List<String>, right: List<String>): Boolean =
-        abs(cjkShare(left) - cjkShare(right)) <= 0.45
+    private fun sameScript(left: Double, right: Double): Boolean = abs(left - right) <= 0.45
 
     private fun cjkShare(lines: List<String>): Double {
         var cjk = 0

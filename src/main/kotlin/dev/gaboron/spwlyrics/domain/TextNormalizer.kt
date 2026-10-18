@@ -81,6 +81,10 @@ object TextNormalizer {
         return maxOf(contains, lengthBound * 0.75 + tokenDice * 0.25) >= minimum
     }
 
+    /** Skips the edit-distance pass when the cheap upper bound cannot reach the threshold. */
+    fun similarityAtLeast(left: PreparedText, right: PreparedText, minimum: Double): Boolean =
+        couldReachSimilarity(left, right, minimum) && similarity(left, right) >= minimum
+
     class PreparedText internal constructor(
         val normalized: String,
         val compact: String,

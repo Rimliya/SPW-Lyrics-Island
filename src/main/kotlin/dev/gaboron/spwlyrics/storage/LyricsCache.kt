@@ -41,6 +41,11 @@ const val MANUAL_OVERRIDE_MODEL_VERSION = 2
 
 interface LyricsCache {
     fun getLyrics(query: TrackQuery): CachedLyrics?
+    /**
+     * Fast presence check for batch listings. Implementations may skip decoding cached JSON and
+     * therefore only report a likely hit; normal playback still validates the entry before use.
+     */
+    fun hasLyrics(query: TrackQuery): Boolean = getLyrics(query) != null
     fun putLyrics(query: TrackQuery, lyrics: CachedLyrics)
     fun removeLyrics(query: TrackQuery)
     fun getOverride(query: TrackQuery): ManualOverride?
@@ -74,6 +79,14 @@ class FileLyricsCache(
             ?.takeIf(::validLyrics)
         stored?.let { memory[query.key] = it }
         return stored
+    }
+
+    @Synchronized
+    override fun hasLyrics(query: TrackQuery): Boolean {
+        memory[query.key]?.takeIf(::validLyrics)?.let { return true }
+        val modified = runCatching { Files.getLastModifiedTime(layout.lyrics(query)).toMillis() }.getOrNull()
+            ?: return false
+        return !expired(modified, successTtl)
     }
 
     @Synchronized

@@ -123,7 +123,7 @@ internal class LyricsBatchProcessor(
                     stage = "未选择",
                     message = "未选择",
                 )
-                !includeCached && cache.getLyrics(query) != null -> LyricsBatchItem(
+                !includeCached && cache.hasLyrics(query) -> LyricsBatchItem(
                     query,
                     LyricsBatchItemState.CACHED,
                     progress = 1.0,

@@ -15,18 +15,18 @@ data class TrackQuery(
     val externalIds: Map<String, String> = emptyMap(),
     val trackId: String = "",
 ) {
-    val key: String
-        get() {
-            val identity = listOf(
-                path.trim().lowercase(),
-                TextNormalizer.normalize(title),
-                artists.joinToString("/") { TextNormalizer.normalize(it) },
-                TextNormalizer.normalize(album),
-            ).joinToString("|")
-            return MessageDigest.getInstance("SHA-256")
-                .digest(identity.toByteArray(StandardCharsets.UTF_8))
-                .joinToString("") { "%02x".format(it) }
-        }
+    /** Immutable query identity: normalize and hash once per track instead of on every lookup. */
+    val key: String by lazy {
+        val identity = listOf(
+            path.trim().lowercase(),
+            TextNormalizer.normalize(title),
+            artists.joinToString("/") { TextNormalizer.normalize(it) },
+            TextNormalizer.normalize(album),
+        ).joinToString("|")
+        MessageDigest.getInstance("SHA-256")
+            .digest(identity.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
 
     fun searchQueries(): List<String> {
         val cleanTitle = TextNormalizer.removeVersionNoise(title).trim()
