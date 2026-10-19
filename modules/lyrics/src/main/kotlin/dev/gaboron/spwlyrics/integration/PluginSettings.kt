@@ -15,11 +15,13 @@ class PluginSettings(
     private val initialConfig = manager.getConfig(CONFIG_FILE)
     private val replacementPolicy = AtomicReference(readPolicy(initialConfig))
     private val similarityLevel = AtomicReference(readSimilarity(initialConfig))
+    private val prefetchNext = AtomicReference(readPrefetch(initialConfig))
     private val listener = Consumer<ConfigHelper> {
         // SPW saves settings through a separate helper; the callback can still hold cached values.
         if (!it.reload()) return@Consumer
         replacementPolicy.set(readPolicy(it))
         similarityLevel.set(readSimilarity(it))
+        prefetchNext.set(readPrefetch(it))
     }
 
     init {
@@ -29,6 +31,8 @@ class PluginSettings(
     fun automaticReplacementPolicy(): AutomaticReplacementPolicy = replacementPolicy.get()
 
     fun similarityLevel(): LyricsSimilarity.Level = similarityLevel.get()
+
+    fun prefetchNextTrack(): Boolean = prefetchNext.get()
 
     override fun close() {
         manager.removeConfigChangeListener(listener)
@@ -44,9 +48,13 @@ class PluginSettings(
             config.get(SIMILARITY_LEVEL_KEY, LyricsSimilarity.Level.STANDARD.configValue),
         )
 
+    private fun readPrefetch(config: ConfigHelper): Boolean =
+        config.get(PREFETCH_NEXT_KEY, true)
+
     companion object {
         const val CONFIG_FILE = "spw-lyrics.json"
         const val REPLACEMENT_POLICY_KEY = "automatic_replacement_policy"
         const val SIMILARITY_LEVEL_KEY = "similarity_level"
+        const val PREFETCH_NEXT_KEY = "prefetch_next_track"
     }
 }
