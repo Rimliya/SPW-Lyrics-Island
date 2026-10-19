@@ -45,7 +45,7 @@ internal class SpwLibraryTrackSource {
             else -> null
         }
         val matched = exact ?: matchByMetadata(tracks, raw)
-        return matched?.toQuery() ?: raw.takeIf { it.path.isNotBlank() }
+        return matched?.toQuery() ?: raw.takeIf { it.path.isNotBlank() && it.title.isNotBlank() }
     }
 
     /** Library-order fallback used only when the host queue cannot be read. */
