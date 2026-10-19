@@ -45,7 +45,7 @@ src/main/resources ← 单一插件清单、合并后的设置页
 | 模块 | 来源 | 记录版本 | 提交 |
 | --- | --- | --- | --- |
 | `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.1.0-Main` | `70c0863` |
-| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `1.1.2-e.1` | `d4a25ce` |
+| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `1.2.0-f.1` | `8141b9f` |
 
 原始项目：[GaBoron/SPW-island](https://github.com/GaBoron/SPW-island)、[GaBoron/SPW-Lyrics](https://github.com/GaBoron/SPW-Lyrics)。
 
