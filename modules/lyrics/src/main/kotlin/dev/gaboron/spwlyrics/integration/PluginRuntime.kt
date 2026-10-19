@@ -142,6 +142,28 @@ object PluginRuntime {
         if (cacheFolderOpener?.open() != true) toastWarning("无法打开 SPW Lyrics 本地缓存文件夹。")
     }
 
+    fun canDisableCurrentLyrics(): Boolean {
+        val active = coordinator ?: return false
+        val query = currentQuery() ?: return false
+        return runCatching { active.canDisableCurrentLyrics(query) }.getOrDefault(false)
+    }
+
+    fun disableCurrentLyrics(): Boolean {
+        val active = coordinator ?: return false
+        val query = currentQuery() ?: return false
+        Thread({
+            val disabled = runCatching { active.disableCurrentLyrics(query) }.getOrDefault(false)
+            runCatching {
+                WorkshopApi.ui.toast(
+                    if (disabled) "已禁用本曲自动歌词；可在插件设置中打开手动搜索选择正确歌词。"
+                    else "未禁用：当前歌词已切换或不可用。",
+                    if (disabled) WorkshopApi.Ui.ToastType.Warning else WorkshopApi.Ui.ToastType.Error,
+                )
+            }
+        }, "spw-lyrics-disable-current").apply { isDaemon = true }.start()
+        return true
+    }
+
     @Synchronized
     fun close() {
         manualSearchShortcut?.close()
