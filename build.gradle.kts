@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "dev.gaboron.spwlyrics"
-version = "1.1.2-e.1"
+version = "1.2.0-f.1"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25
@@ -36,7 +36,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("com.github.houbb:opencc4j:1.14.0")
     implementation("net.jthink:jaudiotagger:3.0.1")
-    // Both tool windows share the host's Compose classes and platform-native Skiko.
+    // Tool windows share the host's Compose classes and platform-native Skiko.
     compileOnly("org.jetbrains.compose.desktop:desktop:1.12.1")
 
     testImplementation(kotlin("test"))
