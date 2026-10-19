@@ -8,6 +8,7 @@ import dev.gaboron.spwlyrics.application.AutomaticReplacementPolicy
 import dev.gaboron.spwlyrics.application.LyricsLoadPhase
 import dev.gaboron.spwlyrics.application.LyricsLoadCoordinator
 import dev.gaboron.spwlyrics.application.LyricsBatchProcessor
+import dev.gaboron.spwlyrics.application.LyricsPrefetcher
 import dev.gaboron.spwlyrics.application.LyricsResolver
 import dev.gaboron.spwlyrics.application.LyricsOutputRouter
 import dev.gaboron.spwlyrics.domain.LyricsCandidate
@@ -26,6 +27,7 @@ import dev.gaboron.spwlyrics.storage.FileLyricsCache
 import dev.gaboron.spwlyrics.integration.manualui.ManualSearchWindow
 import dev.gaboron.spwlyrics.integration.manualui.ManualSearchOperations
 import dev.gaboron.spwlyrics.integration.batchui.BatchProcessingWindow
+import dev.gaboron.spwlyrics.integration.metadataui.MetadataEditorWindow
 import dev.gaboron.spwlyrics.storage.FileLyricsDelaySettings
 import java.time.Duration
 import kotlin.io.path.Path
@@ -35,11 +37,16 @@ object PluginRuntime {
     @Volatile private var batchProcessor: LyricsBatchProcessor? = null
     @Volatile private var batchWindow: BatchProcessingWindow? = null
     @Volatile private var settings: PluginSettings? = null
+    @Volatile private var prefetcher: LyricsPrefetcher? = null
     @Volatile private var manualWindow: ManualSearchWindow? = null
+    @Volatile private var metadataWindow: MetadataEditorWindow? = null
     @Volatile private var manualSearchShortcut: SpwManualSearchBinding? = null
+    @Volatile private var metadataEditorShortcut: SpwMetadataEditorBinding? = null
     @Volatile private var cacheFolderOpener: CacheFolderOpener? = null
     private val libraryTracks = SpwLibraryTrackSource()
+    private val nextTracks = SpwNextTrackSource(libraryTracks)
     private val localTtmlLyrics = LocalTtmlLyricsLoader()
+    private const val PREFETCH_DELAY_MILLIS = 2_000L
 
     @Synchronized
     @OptIn(UnstableSpwWorkshopApi::class)
@@ -92,6 +99,17 @@ object PluginRuntime {
             if (error is PluginPermissionDeniedException) "请在 SPW 的插件权限中授予曲库读取权限后重试。"
             else "批量处理失败：${error.message ?: "未知错误"}"
         }
+        metadataWindow = MetadataEditorWindow(
+            readCurrentPath = { currentQuery()?.path },
+            refreshSavedPath = { path ->
+                val currentPath = WorkshopApi.playback.getCurrentMediaItem()?.path
+                if (currentPath != null && runCatching { java.nio.file.Path.of(currentPath).toRealPath() == path }.getOrDefault(false)) {
+                    check(refreshBridge.reloadCurrentLyrics()) { "请切换歌曲后重新播放以加载内嵌歌词。" }
+                }
+            },
+            openLyricsSearch = ::openManualSearch,
+            onFailure = ::toastWarning,
+        )
         manualWindow = ManualSearchWindow(object : ManualSearchOperations {
             override fun currentQuery() = PluginRuntime.currentQuery()
             override fun search(query: TrackQuery, keywords: String, source: LyricsSource?) =
@@ -105,14 +123,41 @@ object PluginRuntime {
             override fun setDelay(query: TrackQuery, delayMs: Int) =
                 isCurrentTrack(query) && coordinator?.setDelay(query, delayMs) == true
             override fun openBatch() = openBatchProcessing()
+            override fun openMetadata() = openMetadataEditor()
+            override fun editMetadata(query: TrackQuery, document: LyricsDocument) {
+                metadataWindow?.importSearch(query, document)
+            }
         }, ::toastWarning)
         settings = PluginSettings(WorkshopApi.manager.createConfigManager())
+        prefetcher = LyricsPrefetcher(
+            cache = cache,
+            nextTrack = nextTracks::next,
+            resolve = { query ->
+                val local = query.path.takeIf(String::isNotBlank)?.let(localTtmlLyrics::load)
+                resolver.resolveAutomaticFully(
+                    query,
+                    reference = local,
+                    similarity = settings?.similarityLevel() ?: LyricsSimilarity.Level.STANDARD,
+                )?.let(resolver::toCache)
+            },
+            enabled = { settings?.prefetchNextTrack() == true },
+            policy = { settings?.automaticReplacementPolicy() ?: AutomaticReplacementPolicy.ALWAYS },
+            hasLocalLyrics = { query ->
+                query.path.isNotBlank() && localTtmlLyrics.load(query.path) != null
+            },
+            delayMillis = PREFETCH_DELAY_MILLIS,
+        )
         val shortcut = SpwManualSearchBinding(::openManualSearch)
         manualSearchShortcut = shortcut
         runCatching { shortcut.register() }.onFailure {
             toastWarning("无法注册歌词搜索快捷键，请检查 SPW 的快捷键权限和冲突设置。")
         }.onSuccess { granted ->
             if (!granted) toastWarning("歌词搜索快捷键未启用：请在 SPW 的插件权限中授予快捷键权限。")
+        }
+        val metadataShortcut = SpwMetadataEditorBinding(::openMetadataEditor)
+        metadataEditorShortcut = metadataShortcut
+        runCatching { metadataShortcut.register() }.onFailure {
+            toastWarning("无法注册元数据编辑快捷键，请检查 SPW 的快捷键权限和设置。")
         }
     }
 
@@ -137,6 +182,10 @@ object PluginRuntime {
     @Synchronized
     fun openBatchProcessing() {
         batchWindow?.open()
+    }
+    @Synchronized
+    fun openMetadataEditor() {
+        metadataWindow?.open()
     }
     fun openCacheFolder() {
         if (cacheFolderOpener?.open() != true) toastWarning("无法打开 SPW Lyrics 本地缓存文件夹。")
@@ -168,9 +217,15 @@ object PluginRuntime {
     fun close() {
         manualSearchShortcut?.close()
         manualSearchShortcut = null
+        metadataEditorShortcut?.close()
+        metadataEditorShortcut = null
         manualWindow?.close()
         manualWindow = null
+        metadataWindow?.close()
+        metadataWindow = null
         cacheFolderOpener = null
+        prefetcher?.close()
+        prefetcher = null
         settings?.close()
         settings = null
         batchWindow?.close()
@@ -188,6 +243,7 @@ object PluginRuntime {
         localTtml: (() -> LyricsDocument?)? = null,
     ): String? {
         val query = libraryTracks.fromLyricsCallback(mediaItem)
+        prefetcher?.onTrackLoaded(query)
         return coordinator?.onLoad(
             query,
             phase,
@@ -201,4 +257,5 @@ object PluginRuntime {
     private fun toastWarning(message: String) {
         runCatching { WorkshopApi.ui.toast(message, WorkshopApi.Ui.ToastType.Warning) }
     }
+
 }
