@@ -109,7 +109,8 @@ internal class SpwPlaybackQueueProbe(
     private fun Any.toQuery(): TrackQuery? {
         val metadata = member(this, "mediaMetadata", "getMediaMetadata") ?: this
         val title = string(metadata, "title", "getTitle")?.trim().orEmpty()
-        if (title.isBlank()) return null
+        val path = pathOf(this).orEmpty()
+        if (title.isBlank() && path.isBlank()) return null
         val artist = string(metadata, "artist", "getArtist").orEmpty()
         val album = string(metadata, "albumTitle", "getAlbumTitle", "album").orEmpty()
         val albumArtist = string(metadata, "albumArtist", "getAlbumArtist").orEmpty()
@@ -120,7 +121,7 @@ internal class SpwPlaybackQueueProbe(
             artists = TrackQuery.splitArtists(artist),
             album = album,
             albumArtists = TrackQuery.splitArtists(albumArtist),
-            path = pathOf(this).orEmpty(),
+            path = path,
             durationMs = duration?.takeIf { it > 0 },
             trackId = mediaId,
         )
@@ -205,7 +206,7 @@ internal class SpwNextTrackSource(
         val result = queue.next()
         if (result.available) {
             return result.track?.let { raw ->
-                library.canonicalize(raw) ?: raw.takeIf { it.path.isNotBlank() }
+                library.canonicalize(raw) ?: raw.takeIf { it.path.isNotBlank() && it.title.isNotBlank() }
             }
         }
         return library.nextInLibrary(current)
