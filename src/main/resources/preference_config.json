@@ -23,11 +23,25 @@
           "default_value": "standard"
         },
         {
+          "key": "prefetch_next_track",
+          "type": "switch",
+          "title": "预取下一首歌词",
+          "summary": "提前搜索并缓存下一首，减少切歌后的等待；无法读取播放队列时按曲库顺序预取",
+          "default_value": true
+        },
+        {
           "type": "button",
           "title": "打开手动搜索",
           "summary": "无需快捷键，直接打开当前歌曲的手动搜索窗口",
           "arrow_type": "none",
           "on_click": "dev.gaboron.spwlyrics.integration.SpwLyricsActions.openManualSearch"
+        },
+        {
+          "type": "button",
+          "title": "歌曲元数据编辑",
+          "summary": "读取、修改本地歌曲信息，编辑或导入内嵌歌词",
+          "arrow_type": "none",
+          "on_click": "dev.gaboron.spwlyrics.integration.SpwLyricsActions.openMetadataEditor"
         },
         {
           "type": "button",
