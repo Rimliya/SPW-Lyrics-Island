@@ -16,6 +16,11 @@ internal object LyricsMetrics {
     private val prefetchSkips = AtomicLong()
     private val batchSkips = AtomicLong()
     private var windowStart = System.nanoTime()
+    @Volatile private var sink: ((String) -> Unit)? = null
+
+    fun configureSink(value: (String) -> Unit) {
+        sink = value
+    }
 
     fun cacheHit() = cacheHits.incrementAndGet()
     fun cacheMiss() = cacheMisses.incrementAndGet()
@@ -43,9 +48,11 @@ internal object LyricsMetrics {
         if (hits + misses + providers + online + prefetch + batchSkipped == 0L) return
         val totalCache = hits + misses
         val hitRate = if (totalCache == 0L) 0.0 else hits * 100.0 / totalCache
-        println(String.format(Locale.ROOT,
+        val line = String.format(Locale.ROOT,
             "[SPW Lyrics] cacheHit=%d cacheMiss=%d hitRate=%.1f%% providers=%d providerFail=%d " +
                 "online=%d prefetch=%d prefetchOk=%d prefetchSkip=%d batchSkip=%d",
-            hits, misses, hitRate, providers, failures, online, prefetch, prefetchOk, prefetchSkipped, batchSkipped))
+            hits, misses, hitRate, providers, failures, online, prefetch, prefetchOk, prefetchSkipped, batchSkipped)
+        val target = sink
+        if (target != null) target(line) else println(line)
     }
 }
