@@ -71,6 +71,7 @@ class LyricsLoadCoordinator(
         if (local != null && !automaticLoadAllowed) return render(query, local)
         if (override?.candidate == null && !automaticLoadAllowed) return null
         cache.getLyrics(query)?.let { cached ->
+            LyricsMetrics.cacheHit()
             notifiedFailures.remove(query.key)
             if (InstrumentalLyrics.isPlaceholder(cached.document)) {
                 return render(query, cached.document, cached.encoded)
@@ -80,6 +81,7 @@ class LyricsLoadCoordinator(
             }
             return render(query, cached.document, cached.encoded)
         }
+        LyricsMetrics.cacheMiss()
         inFlight.computeIfAbsent(query.key) {
             val automaticToken = Any()
             if (override?.candidate == null) activeAutomaticLoads[query.key] = automaticToken
@@ -205,6 +207,7 @@ class LyricsLoadCoordinator(
         if (cached != null && !LyricsSelectionPolicy.canReplace(cached.document, result.document)) return
         if (cached?.document == result.document) return
         cache.putLyrics(query, resolver.toCache(result))
+        LyricsMetrics.onlineResult()
         notifiedFailures.remove(query.key)
         if (current.get()?.key == query.key) {
             offer(query, result.document)

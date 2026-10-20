@@ -8,6 +8,7 @@ import dev.gaboron.spwlyrics.application.AutomaticReplacementPolicy
 import dev.gaboron.spwlyrics.application.LyricsLoadPhase
 import dev.gaboron.spwlyrics.application.LyricsLoadCoordinator
 import dev.gaboron.spwlyrics.application.LyricsBatchProcessor
+import dev.gaboron.spwlyrics.application.LyricsMetrics
 import dev.gaboron.spwlyrics.application.LyricsPrefetcher
 import dev.gaboron.spwlyrics.application.LyricsResolver
 import dev.gaboron.spwlyrics.application.LyricsOutputRouter
@@ -244,12 +245,14 @@ object PluginRuntime {
     ): String? {
         val query = libraryTracks.fromLyricsCallback(mediaItem)
         prefetcher?.onTrackLoaded(query)
-        return coordinator?.onLoad(
+        val result = coordinator?.onLoad(
             query,
             phase,
             settings?.automaticReplacementPolicy() ?: AutomaticReplacementPolicy.ALWAYS,
             localTtml,
         )
+        LyricsMetrics.maybeLog()
+        return result
     }
 
     private fun localLyrics(query: TrackQuery): LyricsDocument? =
