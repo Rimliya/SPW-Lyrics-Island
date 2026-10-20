@@ -85,6 +85,20 @@ class LyricsPrefetcherTest {
         assertFalse(same.prefetchNow(current))
     }
 
+    @Test
+    fun skipsLocalInstrumentalPlaceholder() {
+        val cache = MemoryCache()
+        var resolved = false
+        val prefetcher = prefetcher(
+            cache,
+            localLyrics = { placeholder() },
+            resolve = { resolved = true; cached() },
+        )
+
+        assertFalse(prefetcher.prefetchNow(current))
+        assertFalse(resolved)
+    }
+
     private fun prefetcher(
         cache: LyricsCache,
         nextTrack: (TrackQuery) -> TrackQuery? = { next },
@@ -92,7 +106,8 @@ class LyricsPrefetcherTest {
         enabled: () -> Boolean = { true },
         policy: () -> AutomaticReplacementPolicy = { AutomaticReplacementPolicy.ALWAYS },
         hasLocalLyrics: (TrackQuery) -> Boolean = { false },
-    ) = LyricsPrefetcher(cache, nextTrack, resolve, enabled, policy, hasLocalLyrics)
+        localLyrics: ((TrackQuery) -> LyricsDocument?)? = null,
+    ) = LyricsPrefetcher(cache, nextTrack, resolve, enabled, policy, hasLocalLyrics, localLyrics)
 
     private fun query(title: String) = TrackQuery(
         title = title,
@@ -108,6 +123,12 @@ class LyricsPrefetcherTest {
         source = LyricsSource.AMLL,
         format = LyricsFormat.LRC,
         lines = listOf(LyricLine(startMs = 0, endMs = 1_000, text = "test")),
+    )
+
+    private fun placeholder() = LyricsDocument(
+        source = LyricsSource.LOCAL,
+        format = LyricsFormat.PLAIN,
+        lines = listOf(LyricLine(text = "纯音乐，请欣赏")),
     )
 
     private class MemoryCache : LyricsCache {

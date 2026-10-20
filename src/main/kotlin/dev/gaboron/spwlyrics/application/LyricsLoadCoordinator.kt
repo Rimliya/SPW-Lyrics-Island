@@ -3,6 +3,7 @@ package dev.gaboron.spwlyrics.application
 import dev.gaboron.spwlyrics.domain.LyricsCandidate
 import dev.gaboron.spwlyrics.domain.LyricsDocument
 import dev.gaboron.spwlyrics.domain.LyricsSimilarity
+import dev.gaboron.spwlyrics.domain.InstrumentalLyrics
 import dev.gaboron.spwlyrics.domain.TrackQuery
 import dev.gaboron.spwlyrics.storage.CachedLyrics
 import dev.gaboron.spwlyrics.storage.LyricsCache
@@ -64,12 +65,16 @@ class LyricsLoadCoordinator(
             localLyrics.get()?.takeIf { it.first == query.key }?.let { return render(query, it.second) }
         }
         if (override?.local == true) return null
+        if (local != null && InstrumentalLyrics.isPlaceholder(local)) return render(query, local)
         val automaticLoadAllowed = replacementPolicy.allowsAutomaticLoad(phase)
         // Local lyrics stay authoritative unless the policy asks for a verified plugin result.
         if (local != null && !automaticLoadAllowed) return render(query, local)
         if (override?.candidate == null && !automaticLoadAllowed) return null
         cache.getLyrics(query)?.let { cached ->
             notifiedFailures.remove(query.key)
+            if (InstrumentalLyrics.isPlaceholder(cached.document)) {
+                return render(query, cached.document, cached.encoded)
+            }
             if (override?.candidate == null && !activeAutomaticLoads.contains(query.key)) {
                 startQualityUpgradeIfNeeded(query, resolvedFromCache(query, cached))
             }
