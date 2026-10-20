@@ -148,6 +148,7 @@ internal class LyricsBatchProcessor(
             val query = synchronized(lock) { items[index].query }
             val local = runCatching { localLyrics?.invoke(query) }.getOrNull()
             if (local != null && InstrumentalLyrics.isPlaceholder(local)) {
+                LyricsMetrics.batchSkip()
                 synchronized(lock) {
                     if (generation == expectedGeneration) items[index] = items[index].copy(
                         state = LyricsBatchItemState.EXCLUDED,
