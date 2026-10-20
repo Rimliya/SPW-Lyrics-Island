@@ -1,6 +1,8 @@
 package dev.gaboron.spwlyrics.application
 
 import dev.gaboron.spwlyrics.domain.TrackQuery
+import dev.gaboron.spwlyrics.domain.LyricsDocument
+import dev.gaboron.spwlyrics.domain.InstrumentalLyrics
 import dev.gaboron.spwlyrics.storage.CachedLyrics
 import dev.gaboron.spwlyrics.storage.LyricsCache
 import java.util.concurrent.ExecutorService
@@ -21,6 +23,7 @@ class LyricsPrefetcher(
     private val enabled: () -> Boolean,
     private val policy: () -> AutomaticReplacementPolicy,
     private val hasLocalLyrics: (TrackQuery) -> Boolean = { false },
+    private val localLyrics: ((TrackQuery) -> LyricsDocument?)? = null,
     private val delayMillis: Long = 0,
 ) : AutoCloseable {
     private val executor: ExecutorService = Executors.newCachedThreadPool { task ->
@@ -58,8 +61,10 @@ class LyricsPrefetcher(
         if (!enabled() || policy() == AutomaticReplacementPolicy.MANUAL_ONLY) return false
         val next = runCatching { nextTrack(current) }.getOrNull() ?: return false
         if (next.key == current.key || next.path.isBlank()) return false
+        val local = runCatching { localLyrics?.invoke(next) }.getOrNull()
+        if (local != null && InstrumentalLyrics.isPlaceholder(local)) return false
         if (policy() == AutomaticReplacementPolicy.WHEN_LOCAL_MISSING &&
-            runCatching { hasLocalLyrics(next) }.getOrDefault(false)) return false
+            (local != null || runCatching { hasLocalLyrics(next) }.getOrDefault(false))) return false
         if (cache.hasLyrics(next) || cache.getOverride(next) != null) return false
         val cached = runCatching { resolve(next) }.getOrNull() ?: return false
         if (!enabled() || generation.get() != token || Thread.currentThread().isInterrupted) return false

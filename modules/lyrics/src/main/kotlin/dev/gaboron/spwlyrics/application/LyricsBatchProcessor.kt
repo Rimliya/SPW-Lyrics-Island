@@ -1,6 +1,8 @@
 package dev.gaboron.spwlyrics.application
 
 import dev.gaboron.spwlyrics.domain.TrackQuery
+import dev.gaboron.spwlyrics.domain.LyricsDocument
+import dev.gaboron.spwlyrics.domain.InstrumentalLyrics
 import dev.gaboron.spwlyrics.storage.LyricsCache
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -31,6 +33,7 @@ internal class LyricsBatchProcessor(
     private val loadLibrary: () -> List<TrackQuery>,
     private val cache: LyricsCache,
     private val resolver: LyricsResolver,
+    private val localLyrics: ((TrackQuery) -> LyricsDocument?)? = null,
 ) : AutoCloseable {
     private val workers = Executors.newFixedThreadPool(PARALLEL_TRACKS) { task ->
         Thread(task, "spw-lyrics-batch").apply { isDaemon = true }
@@ -143,6 +146,18 @@ internal class LyricsBatchProcessor(
         while (true) {
             val index = takeNext(expectedGeneration) ?: break
             val query = synchronized(lock) { items[index].query }
+            val local = runCatching { localLyrics?.invoke(query) }.getOrNull()
+            if (local != null && InstrumentalLyrics.isPlaceholder(local)) {
+                synchronized(lock) {
+                    if (generation == expectedGeneration) items[index] = items[index].copy(
+                        state = LyricsBatchItemState.EXCLUDED,
+                        progress = 1.0,
+                        stage = "纯音乐",
+                        message = "本地歌词为纯音乐，已跳过在线获取",
+                    )
+                }
+                continue
+            }
             val outcome = runCatching { resolveShared(query, expectedGeneration, index, sharedResolutions) }
             val resolved = outcome.getOrNull()
             if (resolved != null && isCurrent(expectedGeneration)) {
