@@ -8,7 +8,6 @@ import dev.gaboron.spwlyrics.application.AutomaticReplacementPolicy
 import dev.gaboron.spwlyrics.application.LyricsLoadPhase
 import dev.gaboron.spwlyrics.application.LyricsLoadCoordinator
 import dev.gaboron.spwlyrics.application.LyricsBatchProcessor
-import dev.gaboron.spwlyrics.application.LyricsMetrics
 import dev.gaboron.spwlyrics.application.LyricsPrefetcher
 import dev.gaboron.spwlyrics.application.LyricsResolver
 import dev.gaboron.spwlyrics.application.LyricsOutputRouter
@@ -31,8 +30,6 @@ import dev.gaboron.spwlyrics.integration.batchui.BatchProcessingWindow
 import dev.gaboron.spwlyrics.integration.metadataui.MetadataEditorWindow
 import dev.gaboron.spwlyrics.storage.FileLyricsDelaySettings
 import java.time.Duration
-import java.nio.file.Files
-import java.nio.file.StandardOpenOption
 import kotlin.io.path.Path
 
 object PluginRuntime {
@@ -56,14 +53,6 @@ object PluginRuntime {
     fun install() {
         if (coordinator != null) return
         val root = DataDirectory.root
-        Files.createDirectories(root)
-        LyricsMetrics.configureSink { line ->
-            println(line)
-            runCatching {
-                Files.writeString(root.resolve("lyrics-performance.log"), line + "\n",
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND)
-            }
-        }
         val cacheDirectory = root.resolve("cache")
         val cache = FileLyricsCache(cacheDirectory)
         val delays = FileLyricsDelaySettings(root.resolve("歌词延迟"))
@@ -261,7 +250,6 @@ object PluginRuntime {
             settings?.automaticReplacementPolicy() ?: AutomaticReplacementPolicy.ALWAYS,
             localTtml,
         )
-        LyricsMetrics.maybeLog()
         return result
     }
 

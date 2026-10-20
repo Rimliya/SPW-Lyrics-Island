@@ -36,7 +36,6 @@ class LyricsPrefetcher(
 
     fun onTrackLoaded(current: TrackQuery) {
         if (!enabled() || policy() == AutomaticReplacementPolicy.MANUAL_ONLY) {
-            LyricsMetrics.prefetchSkip()
             return
         }
         synchronized(lock) {
@@ -62,31 +61,25 @@ class LyricsPrefetcher(
 
     private fun prefetch(current: TrackQuery, token: Int): Boolean {
         if (!enabled() || policy() == AutomaticReplacementPolicy.MANUAL_ONLY) {
-            LyricsMetrics.prefetchSkip()
             return false
         }
         val next = runCatching { nextTrack(current) }.getOrNull() ?: return false
         if (next.key == current.key || next.path.isBlank()) return false
-        LyricsMetrics.prefetchAttempt()
         val local = runCatching { localLyrics?.invoke(next) }.getOrNull()
         if (local != null && InstrumentalLyrics.isPlaceholder(local)) {
-            LyricsMetrics.prefetchSkip()
             return false
         }
         if (policy() == AutomaticReplacementPolicy.WHEN_LOCAL_MISSING &&
             (local != null || runCatching { hasLocalLyrics(next) }.getOrDefault(false))) {
-            LyricsMetrics.prefetchSkip()
             return false
         }
         if (cache.hasLyrics(next) || cache.getOverride(next) != null) {
-            LyricsMetrics.prefetchSkip()
             return false
         }
         val cached = runCatching { resolve(next) }.getOrNull() ?: return false
         if (!enabled() || generation.get() != token || Thread.currentThread().isInterrupted) return false
         if (cache.hasLyrics(next) || cache.getOverride(next) != null) return false
         cache.putLyrics(next, cached)
-        LyricsMetrics.prefetchSuccess()
         return true
     }
 
