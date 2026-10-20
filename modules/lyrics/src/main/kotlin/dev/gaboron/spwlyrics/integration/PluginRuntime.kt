@@ -93,6 +93,7 @@ object PluginRuntime {
             loadLibrary = libraryTracks::load,
             cache = cache,
             resolver = resolver,
+            localLyrics = ::localLyrics,
         )
         batchProcessor = batch
         batchWindow = BatchProcessingWindow(batch, ::toastWarning) { error ->
@@ -133,7 +134,7 @@ object PluginRuntime {
             cache = cache,
             nextTrack = nextTracks::next,
             resolve = { query ->
-                val local = query.path.takeIf(String::isNotBlank)?.let(localTtmlLyrics::load)
+                val local = localLyrics(query)
                 resolver.resolveAutomaticFully(
                     query,
                     reference = local,
@@ -142,9 +143,8 @@ object PluginRuntime {
             },
             enabled = { settings?.prefetchNextTrack() == true },
             policy = { settings?.automaticReplacementPolicy() ?: AutomaticReplacementPolicy.ALWAYS },
-            hasLocalLyrics = { query ->
-                query.path.isNotBlank() && localTtmlLyrics.load(query.path) != null
-            },
+            hasLocalLyrics = { query -> localLyrics(query) != null },
+            localLyrics = ::localLyrics,
             delayMillis = PREFETCH_DELAY_MILLIS,
         )
         val shortcut = SpwManualSearchBinding(::openManualSearch)
@@ -251,6 +251,9 @@ object PluginRuntime {
             localTtml,
         )
     }
+
+    private fun localLyrics(query: TrackQuery): LyricsDocument? =
+        query.path.takeIf(String::isNotBlank)?.let(localTtmlLyrics::load)
 
     private fun isCurrentTrack(query: TrackQuery): Boolean = currentQuery()?.key == query.key
 
