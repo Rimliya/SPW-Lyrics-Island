@@ -195,19 +195,16 @@ class LyricsResolver(
         reference: LyricsSimilarity.Reference?,
         similarity: LyricsSimilarity.Level,
     ): FetchedLyrics? {
-        LyricsMetrics.providerRequest()
         val winner = findWinner(provider, query, deadlineNanos) ?: run {
-            LyricsMetrics.providerFailure()
             return null
         }
         if (System.nanoTime() >= deadlineNanos) {
-            LyricsMetrics.providerFailure()
             return null
         }
         val document = fetchDocument(provider, winner)
             ?.takeIf { it.quality.rank >= minimumQuality.rank }
             ?.takeIf { LyricsSimilarity.accepts(reference, it, similarity) }
-            ?: run { LyricsMetrics.providerFailure(); return null }
+            ?: return null
         return FetchedLyrics(winner, document)
     }
 
