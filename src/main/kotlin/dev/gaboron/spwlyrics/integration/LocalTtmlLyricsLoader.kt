@@ -1,7 +1,10 @@
 package dev.gaboron.spwlyrics.integration
 
 import dev.gaboron.spwlyrics.application.LocalTtmlConversion
+import dev.gaboron.spwlyrics.codec.LrcCodec
 import dev.gaboron.spwlyrics.domain.LyricsDocument
+import dev.gaboron.spwlyrics.domain.InstrumentalLyrics
+import dev.gaboron.spwlyrics.domain.LyricsSource
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
@@ -35,12 +38,21 @@ internal class LocalTtmlLyricsLoader(
 
     private fun read(audio: Path, lrc: Path, ttml: Path): LyricsDocument? {
         if (!Files.isRegularFile(audio)) return null
-        if (Files.isRegularFile(lrc)) return readSidecar(lrc)?.let(conversion::parse)
+        if (Files.isRegularFile(lrc)) return readSidecar(lrc)?.let(::parseLocal)
 
         val embedded = readEmbedded(audio)
-        if (embedded != null) return conversion.parse(embedded)
+        if (embedded != null) return parseLocal(embedded)
 
-        return readSidecar(ttml)?.let(conversion::parse)
+        return readSidecar(ttml)?.let(::parseLocal)
+    }
+
+    private fun parseLocal(raw: String): LyricsDocument? {
+        conversion.parse(raw)?.let { return it }
+        // Normal LRC remains the host's responsibility; only placeholder payloads are parsed here
+        // so the plugin can stop before starting a pointless online lookup.
+        if (!InstrumentalLyrics.isPlaceholderRaw(raw)) return null
+        return runCatching { LrcCodec.parse(raw, LyricsSource.LOCAL) }.getOrNull()
+            ?.takeIf { document -> document.lines.any { it.text.isNotBlank() } }
     }
 
     private fun stamp(path: Path): FileStamp? = runCatching {
