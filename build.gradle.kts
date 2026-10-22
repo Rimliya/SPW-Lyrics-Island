@@ -57,14 +57,14 @@ dependencies {
     compileOnly(workshop) { isTransitive = false }
     compileOnly("org.pf4j:pf4j:3.12.0")
 
-    implementation("net.java.dev.jna:jna:5.17.0")
-    implementation("net.java.dev.jna:jna-platform:5.17.0")
+    compileOnly("net.java.dev.jna:jna:5.17.0")
+    compileOnly("net.java.dev.jna:jna-platform:5.17.0")
     implementation("net.jthink:jaudiotagger:3.0.1")
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("com.github.houbb:opencc4j:1.14.0")
     implementation("io.github.moriafly:salt-ui:3.0.0-beta03")
-    implementation(compose.desktop.currentOs)
+    compileOnly("org.jetbrains.compose.desktop:desktop:1.12.2")
     implementation("org.jetbrains.skiko:skiko-awt:$skikoVersion")
     runtimeOnly("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:$skikoVersion")
 
@@ -72,6 +72,21 @@ dependencies {
     testImplementation(kotlin("stdlib"))
     testImplementation(workshop) { isTransitive = false }
     testImplementation("org.pf4j:pf4j:3.12.0")
+    testImplementation("net.java.dev.jna:jna:5.17.0")
+    testImplementation("net.java.dev.jna:jna-platform:5.17.0")
+}
+
+configurations.runtimeClasspath {
+    exclude(group = "org.jetbrains.kotlin")
+    exclude(group = "org.jetbrains.compose.desktop")
+    listOf("animation", "foundation", "material", "material3", "runtime", "ui", "components")
+        .forEach { exclude(group = "org.jetbrains.compose.$it") }
+    listOf("animation", "foundation", "material", "material3", "runtime", "ui")
+        .forEach { exclude(group = "androidx.compose.$it") }
+    exclude(group = "androidx.lifecycle")
+    exclude(group = "org.jetbrains.androidx.lifecycle")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
 }
 
 val preferenceSources = listOf(
