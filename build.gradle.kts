@@ -28,15 +28,20 @@ kotlin {
                 "modules/island/src/main/kotlin",
                 "modules/lyrics/src/main/kotlin",
             )
-            java.srcDirs(
-                "modules/combined/src/main/java",
-                "modules/island/src/main/java",
-                "modules/lyrics/src/main/java",
-            )
         }
         test {
             kotlin.srcDirs("modules/island/src/test/kotlin", "modules/combined/src/test/kotlin")
         }
+    }
+}
+
+sourceSets {
+    main {
+        java.srcDirs(
+            "modules/combined/src/main/java",
+            "modules/island/src/main/java",
+            "modules/lyrics/src/main/java",
+        )
     }
 }
 
