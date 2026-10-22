@@ -5,7 +5,7 @@ plugins {
     kotlin("jvm") version "2.4.20"
     kotlin("plugin.serialization") version "2.4.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.20"
-    id("org.jetbrains.compose") version "1.12.1"
+    id("org.jetbrains.compose") version "1.12.2"
     id("com.xuncorp.spw.workshop") version "0.1.0-dev23"
     `java-library`
 }
@@ -27,6 +27,11 @@ kotlin {
                 "modules/combined/src/main/kotlin",
                 "modules/island/src/main/kotlin",
                 "modules/lyrics/src/main/kotlin",
+            )
+            java.srcDirs(
+                "modules/combined/src/main/java",
+                "modules/island/src/main/java",
+                "modules/lyrics/src/main/java",
             )
         }
         test {
@@ -53,6 +58,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("com.github.houbb:opencc4j:1.14.0")
+    implementation("io.github.moriafly:salt-ui:3.0.0-beta03")
     implementation(compose.desktop.currentOs)
     implementation("org.jetbrains.skiko:skiko-awt:$skikoVersion")
     runtimeOnly("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:$skikoVersion")
@@ -215,6 +221,7 @@ spmod {
     PluginPermissions = listOf(
         com.xuncorp.spw.workshop.gradle.PluginPermission.LIBRARY_READ,
         com.xuncorp.spw.workshop.gradle.PluginPermission.KEY_BINDINGS,
+        com.xuncorp.spw.workshop.gradle.PluginPermission.CLASS_TRANSFORM,
     )
 }
 
