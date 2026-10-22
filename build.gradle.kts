@@ -50,7 +50,7 @@ val projectUrl = providers.gradleProperty("projectUrl")
 val currentOs = OperatingSystem.current()
 val isWindows = currentOs.isWindows
 val metadataSources = configurations.create("metadataSources") { isTransitive = false }
-val skikoVersion = "0.150.1"
+val skikoVersion = "0.150.2"
 
 dependencies {
     compileOnly(kotlin("stdlib"))
