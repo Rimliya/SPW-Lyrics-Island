@@ -72,6 +72,7 @@ dependencies {
     testImplementation(kotlin("stdlib"))
     testImplementation(workshop) { isTransitive = false }
     testImplementation("org.pf4j:pf4j:3.12.0")
+    testImplementation("org.jetbrains.compose.desktop:desktop:1.12.2")
     testImplementation("net.java.dev.jna:jna:5.17.0")
     testImplementation("net.java.dev.jna:jna-platform:5.17.0")
 }
