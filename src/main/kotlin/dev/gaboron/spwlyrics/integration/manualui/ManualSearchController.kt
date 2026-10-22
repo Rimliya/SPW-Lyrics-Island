@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.gaboron.spwlyrics.domain.CandidateScore
 import dev.gaboron.spwlyrics.domain.LyricsSource
+import dev.gaboron.spwlyrics.codec.TtmlVocalParts
 import dev.gaboron.spwlyrics.storage.LyricsDelaySettings
 import java.awt.EventQueue
 import java.util.concurrent.Executors
@@ -33,7 +34,7 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
             state = state.copy(
                 query = loaded?.first, keywords = loaded?.first?.title.orEmpty(),
                 delayText = (loaded?.second ?: 0).toString(), savedDelay = loaded?.second ?: 0,
-                readingTrack = false, status = if (loaded == null) "请先播放歌曲，再点击刷新当前歌曲。" else "正在搜索…",
+                readingTrack = false, status = if (loaded == null) "请先播放歌曲，再点击“刷新歌曲”。" else "正在搜索…",
             )
             if (loaded != null) search()
         }, { state = state.copy(readingTrack = false); reportFailure(it) })
@@ -70,8 +71,10 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
         if (closed || state.mutating || row !in state.candidates || state.selected == row) return
         val generation = ++previewGeneration
         state = state.copy(selected = row, document = null, previewing = true)
-        submit({ previewGeneration == generation }, { operations.preview(row.candidate) }, { resolved ->
-            state = state.copy(document = resolved?.document, previewing = false)
+        submit({ previewGeneration == generation }, {
+            operations.preview(row.candidate)?.document?.let { it to TtmlVocalParts.mainAgent(it) }
+        }, { resolved ->
+            state = state.copy(document = resolved?.first, previewMainAgent = resolved?.second ?: "v1", previewing = false)
         }, { state = state.copy(previewing = false); reportFailure(it) })
     }
 
@@ -101,8 +104,6 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
         }) { state = state.copy(savedDelay = value) }
     }
 
-    fun openBatch() = operations.openBatch()
-    fun openMetadata() = operations.openMetadata()
     fun editMetadata() {
         if (state.busy) return
         val query = state.query ?: return
