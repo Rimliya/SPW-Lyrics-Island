@@ -79,8 +79,7 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
     private var fullscreen = false
     private var nextScreenCheck = 0L
     private var nextTopmostCheck = 0L
-    private var nextVisibilityCheck = 0L
-    private var nativeHiddenChecks = 0
+    private var fullscreenHidden = false
     private var topmostAvailable = true
     private var lastFrame = System.nanoTime()
     private var lastLines: List<LyricLine> = emptyList()
@@ -231,7 +230,7 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
             pointerPresence?.reset()
             nextTopmostCheck = 0
             frameInterval = 200_000_000L
-            nativeHiddenChecks = 0
+            fullscreenHidden = settings.enabled && settings.hideFullscreen && fullscreen
             return
         }
         buffersReleased = false
@@ -341,18 +340,14 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
             window.isVisible = true
             nextTopmostCheck = 0
         }
-        if (Platform.isWindows() && now >= nextVisibilityCheck) {
-            nextVisibilityCheck = now + 2_000_000_000L
-            if (native.isWindowVisible(window)) {
-                nativeHiddenChecks = 0
-            } else if (++nativeHiddenChecks >= 2) {
-                // A long pause can leave the native peer hidden while AWT still reports visible.
-                nativeHiddenChecks = 0
-                window.isVisible = false
-                window.isVisible = true
-                nextTopmostCheck = 0
-                surface.repaint()
-            }
+        if (fullscreenHidden) {
+            // The fullscreen hide path can leave the native peer stale. Reproduce the
+            // settings/tray recovery once when the overlay becomes visible again.
+            fullscreenHidden = false
+            window.isVisible = false
+            window.isVisible = true
+            nextTopmostCheck = 0
+            surface.repaint()
         }
         if (topmostAvailable && now >= nextTopmostCheck) {
             try { native.reinforceTopmost(window) }
