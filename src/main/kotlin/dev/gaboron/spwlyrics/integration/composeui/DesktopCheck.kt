@@ -1,30 +1,36 @@
 package dev.gaboron.spwlyrics.integration.composeui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.toggleableState
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.moriafly.salt.ui.SaltTheme
+import com.moriafly.salt.ui.Text
 
 @Composable
 internal fun DesktopCheck(checked: Boolean, onChange: () -> Unit, enabled: Boolean, text: String = "", modifier: Modifier = Modifier) {
-    Row(modifier.height(DesktopColors.ControlHeight).alpha(if (enabled) 1f else .55f).clickable(enabled = enabled, role = Role.Checkbox, onClick = onChange)
-        .semantics { toggleableState = if (checked) ToggleableState.On else ToggleableState.Off }, verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(16.dp).background(if (checked) DesktopColors.Accent else DesktopColors.Surface, RoundedCornerShape(4.dp))
-            .border(1.dp, if (checked) DesktopColors.Accent else DesktopColors.Border, RoundedCornerShape(4.dp)), contentAlignment = Alignment.Center) {
-            if (checked) DesktopIcon(DesktopGlyph.Check, androidx.compose.ui.graphics.Color.White, Modifier.size(12.dp))
+    val fill by animateColorAsState(if (checked) SaltTheme.colors.highlight else Color.Transparent, tween(160), label = "check fill")
+    val mark by animateFloatAsState(if (checked) 1f else 0f, tween(160), label = "check mark")
+    Row(modifier.desktopControlMotion(enabled).clip(SaltTheme.shapes.medium)
+        .toggleable(checked, enabled = enabled, role = Role.Checkbox) { onChange() }.padding(8.dp, 7.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.size(18.dp).clip(CircleShape).background(fill)
+            .border(1.dp, if (checked) SaltTheme.colors.highlight else SaltTheme.colors.subText, CircleShape), contentAlignment = Alignment.Center) {
+            DesktopIcon(DesktopGlyph.Check, SaltTheme.colors.onHighlight,
+                Modifier.size(13.dp).graphicsLayer { alpha = mark; scaleX = mark; scaleY = mark })
         }
-        if (text.isNotBlank()) { Spacer(Modifier.width(8.dp)); Text(text, fontSize = 12.sp, color = if (enabled) DesktopColors.Text else DesktopColors.Muted) }
+        if (text.isNotBlank()) Text(text, color = if (enabled) SaltTheme.colors.text else SaltTheme.colors.subText)
     }
 }

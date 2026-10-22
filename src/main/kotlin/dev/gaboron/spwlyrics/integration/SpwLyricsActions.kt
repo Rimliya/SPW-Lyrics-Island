@@ -2,6 +2,9 @@ package dev.gaboron.spwlyrics.integration
 
 object SpwLyricsActions {
     @JvmStatic
+    fun openWorkspace() = PluginRuntime.openWorkspace()
+
+    @JvmStatic
     fun openManualSearch() = PluginRuntime.openManualSearch()
 
     @JvmStatic

@@ -5,12 +5,12 @@ plugins {
     kotlin("jvm") version "2.4.20"
     kotlin("plugin.serialization") version "2.4.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.20"
-    id("org.jetbrains.compose") version "1.12.1"
+    id("org.jetbrains.compose") version "1.12.2"
     id("com.xuncorp.spw.workshop") version "0.1.0-dev23"
 }
 
 group = "dev.gaboron.spwlyrics"
-version = "1.2.0-f.1"
+version = "2.0.0-f.1"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25
@@ -36,17 +36,33 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("com.github.houbb:opencc4j:1.14.0")
     implementation("net.jthink:jaudiotagger:3.0.1")
-    // Tool windows share the host's Compose classes and platform-native Skiko.
-    compileOnly("org.jetbrains.compose.desktop:desktop:1.12.1")
-
+    // The host renders plugin pages with its Compose classes and platform-native Skiko.
+    compileOnly("org.jetbrains.compose.desktop:desktop:1.12.2")
+    implementation("io.github.moriafly:salt-ui:3.0.0-beta03")
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
-    testImplementation("org.jetbrains.compose.desktop:desktop:1.12.1")
+    testImplementation("org.jetbrains.compose.desktop:desktop:1.12.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.test {
     useJUnitPlatform()
+}
+
+// UI components are packaged; shared runtimes and the native dispatcher belong to SPW.
+configurations.runtimeClasspath {
+    exclude(group = "org.jetbrains.kotlin")
+    exclude(group = "org.jetbrains.skiko")
+    // JNA's native resource cache keeps a plugin-owned JAR locked after unload on Windows.
+    exclude(group = "net.java.dev.jna")
+    exclude(group = "androidx.lifecycle")
+    exclude(group = "org.jetbrains.androidx.lifecycle")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
+    listOf("animation", "foundation", "material", "material3", "runtime", "ui", "desktop", "components")
+        .forEach { exclude(group = "org.jetbrains.compose.$it") }
+    listOf("animation", "foundation", "material", "material3", "runtime", "ui")
+        .forEach { exclude(group = "androidx.compose.$it") }
 }
 
 tasks.jar {
@@ -63,7 +79,7 @@ spmod {
     PluginDescription = "为 Salt Player for Windows 自动搜索、匹配并加载多来源歌词。"
     PluginOpenSourceUrl = "https://github.com/Rimliya/SPW-Lyrics"
     PluginHasConfig = true
-    PluginPermissions = listOf(PluginPermission.LIBRARY_READ, PluginPermission.KEY_BINDINGS)
+    PluginPermissions = listOf(PluginPermission.LIBRARY_READ, PluginPermission.KEY_BINDINGS, PluginPermission.CLASS_TRANSFORM)
 }
 tasks.named<Zip>("plugin") {
     archiveFileName.set("spw-lyrics-${project.version}.spmod")
