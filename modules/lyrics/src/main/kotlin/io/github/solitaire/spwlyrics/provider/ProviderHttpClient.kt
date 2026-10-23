@@ -32,13 +32,18 @@ class ProviderHttpClient(
         }
     }
 
-    override fun postJson(url: String, body: String, headers: Map<String, String>): String = send(
-        url,
-        "POST",
-        "application/json; charset=utf-8",
-        body.toByteArray(StandardCharsets.UTF_8),
-        headers,
-    )
+    override fun postJson(url: String, body: String, headers: Map<String, String>): String {
+        val bytes = body.toByteArray(StandardCharsets.UTF_8)
+        return try {
+            send(url, "POST", "application/json; charset=utf-8", bytes, headers)
+        } catch (failure: Throwable) {
+            if (!url.startsWith("https://") || !failure.hasTlsFailure() || Thread.currentThread().isInterrupted) throw failure
+            runCatching { directHttpsFallback.postJson(url, bytes, headers) }.getOrElse { fallbackFailure ->
+                failure.addSuppressed(fallbackFailure)
+                throw failure
+            }
+        }
+    }
 
     override fun postForm(url: String, values: Map<String, String>, headers: Map<String, String>): String {
         val body = values.entries.joinToString("&") { (key, value) -> "${encode(key)}=${encode(value)}" }
@@ -92,7 +97,7 @@ class ProviderHttpClient(
     }
 
     companion object {
-        const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 SPW-Lyrics/1.0.0"
+        const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 SPW-Lyrics/3.0.0"
         fun encode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
 
         private fun Duration.toTimeoutMillis(): Int = toMillis().coerceIn(1, Int.MAX_VALUE.toLong()).toInt()

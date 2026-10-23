@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "io.github.solitaire.spwlyrics"
-version = "2.0.0-f.1"
+version = "3.0.0-f.1"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25
@@ -79,7 +79,7 @@ spmod {
     PluginDescription = "为 Salt Player for Windows 自动搜索、匹配并加载多来源歌词。"
     PluginOpenSourceUrl = "https://github.com/Rimliya/SPW-Lyrics"
     PluginHasConfig = true
-    PluginPermissions = listOf(PluginPermission.LIBRARY_READ, PluginPermission.KEY_BINDINGS, PluginPermission.CLASS_TRANSFORM)
+    PluginPermissions = listOf(PluginPermission.LIBRARY_READ, PluginPermission.CLASS_TRANSFORM)
 }
 tasks.named<Zip>("plugin") {
     archiveFileName.set("spw-lyrics-${project.version}.spmod")

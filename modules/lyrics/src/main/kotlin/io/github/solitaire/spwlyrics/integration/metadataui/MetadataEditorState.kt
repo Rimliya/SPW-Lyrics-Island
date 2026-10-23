@@ -11,6 +11,7 @@ import io.github.solitaire.spwlyrics.storage.AudioMetadataSnapshot
 
 internal data class MetadataEditorState(
     val loaded: AudioMetadataSnapshot? = null,
+    val onlineImport: io.github.solitaire.spwlyrics.domain.OnlineMetadataImport? = null,
     val draft: AudioMetadata = AudioMetadata(),
     val format: MetadataLyricsFormat = MetadataLyricsFormat.TTML,
     val sourceDocument: LyricsDocument? = null,

@@ -8,12 +8,17 @@ import io.github.solitaire.spwlyrics.domain.LyricsDocument
 import io.github.solitaire.spwlyrics.domain.LyricsSource
 import io.github.solitaire.spwlyrics.domain.TrackQuery
 
-class QqMusicProvider(private val http: ProviderHttp) : LyricsProvider {
+class QqMusicProvider(private val http: ProviderHttp) : LyricsProvider, AutoCloseable {
     override val source = LyricsSource.QQ
     private val searchClient = QqSearchClient(http)
+    private val details = QqMetadataClient(http)
+
+    override fun metadata(candidate: LyricsCandidate) = details.load(candidate)
 
     override fun search(query: TrackQuery, keywords: String, limit: Int): List<LyricsCandidate> =
         searchClient.search(keywords, limit)
+
+    override fun close() = searchClient.close()
 
     override fun fetch(candidate: LyricsCandidate): LyricsDocument? = runCatching {
         val musicId = candidate.context["musicId"]?.takeIf(String::isNotBlank) ?: return@runCatching null

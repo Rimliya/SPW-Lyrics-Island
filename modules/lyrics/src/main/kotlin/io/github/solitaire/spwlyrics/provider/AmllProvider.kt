@@ -6,6 +6,7 @@ import io.github.solitaire.spwlyrics.domain.LyricsCandidate
 import io.github.solitaire.spwlyrics.domain.LyricsDocument
 import io.github.solitaire.spwlyrics.domain.LyricsSource
 import io.github.solitaire.spwlyrics.domain.TrackQuery
+import io.github.solitaire.spwlyrics.domain.ProviderSearchStatus
 import java.nio.file.Path
 import java.time.Clock
 
@@ -23,6 +24,9 @@ class AmllProvider(
 
     override fun searchManual(query: TrackQuery, keywords: String, limit: Int): List<LyricsCandidate> =
         index.search(query, keywords, limit, manual = true)
+
+    override fun searchManual(query: TrackQuery, keywords: String, limit: Int,
+        onStatus: (ProviderSearchStatus) -> Unit): List<LyricsCandidate> = index.searchManual(query, keywords, limit, onStatus)
 
     override fun close() = index.close()
 
