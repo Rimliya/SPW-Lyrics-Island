@@ -21,7 +21,7 @@ Release 只提供一个运行包：`spw-lyrics-island-<版本>.spmod`。不要�
 - 灵动词岛：逐字高亮、翻译、长音强调、胶囊 / 刘海外观、封面取色、实时频谱、鼠标穿透和全屏隐藏。
 - OBS Spout2：默认开启的独立透明输出，默认 30 FPS、1280×512，可在 30 / 60 FPS 间切换；低性能模式约 15 FPS。
 - 默认字体：内置苹方，仍可切换内置 MiSans 或系统字体。
-- SPW Lyrics：AMLL TTML、QQ 音乐、酷狗音乐、网易云音乐和本地歌词匹配，支持相似度校验、手动搜索、批量缓存、逐曲延迟、歌曲元数据/内嵌歌词编辑和下一首预取。
+- SPW Lyrics：支持 AMLL TTML、QQ 音乐、汽水音乐、酷狗音乐、网易云音乐、Apple Music、LrcShare，并从 MusicBrainz 获取元数据；可选择类型优先或来源优先。\n- 保留本地歌词相似度校验、纯音乐占位拦截、手动搜索、批量缓存、逐曲延迟、歌曲元数据/内嵌歌词编辑和下一首预取。
 - 词岛右键可“禁用当前获取的逐字歌词”：自动结果不匹配时按曲目退回本地歌词，再从 SPW Lyrics 设置中手动搜索正确结果。
 - 两个配置页合并到同一个插件设置中：`灵动词岛` 与 `SPW Lyrics`。
 
@@ -44,8 +44,8 @@ src/main/resources ← 单一插件清单、合并后的设置页
 
 | 模块 | 来源 | 记录版本 | 提交 |
 | --- | --- | --- | --- |
-| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.1.0-Main` | `70c0863` |
-| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `1.2.0-f.1` | `8141b9f` |
+| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.2.0-Main` | `b4b618a` |
+| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `3.0.0-f.1` | `5d40d15` |
 
 原始项目：[GaBoron/SPW-island](https://github.com/GaBoron/SPW-island)、[GaBoron/SPW-Lyrics](https://github.com/GaBoron/SPW-Lyrics)。
 
