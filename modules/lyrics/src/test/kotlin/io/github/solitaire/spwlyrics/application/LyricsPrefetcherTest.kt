@@ -9,6 +9,7 @@ import io.github.solitaire.spwlyrics.storage.CachedLyrics
 import io.github.solitaire.spwlyrics.storage.LyricsCache
 import io.github.solitaire.spwlyrics.storage.ManualOverride
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -99,6 +100,21 @@ class LyricsPrefetcherTest {
         assertFalse(resolved)
     }
 
+    @Test
+    fun refreshesStaleCacheAfterSelectionChanges() {
+        val cache = MemoryCache()
+        cache.putLyrics(next, cached(selectionKey = "old-selection"))
+        var resolved = false
+        val prefetcher = prefetcher(
+            cache,
+            selectionKey = { "new-selection" },
+            resolve = { resolved = true; cached(selectionKey = "new-selection") },
+        )
+
+        assertTrue(prefetcher.prefetchNow(current))
+        assertTrue(resolved)
+        assertEquals("new-selection", cache.getLyrics(next)?.selectionKey)
+    }
     private fun prefetcher(
         cache: LyricsCache,
         nextTrack: (TrackQuery) -> TrackQuery? = { next },
@@ -107,7 +123,17 @@ class LyricsPrefetcherTest {
         policy: () -> AutomaticReplacementPolicy = { AutomaticReplacementPolicy.ALWAYS },
         hasLocalLyrics: (TrackQuery) -> Boolean = { false },
         localLyrics: ((TrackQuery) -> LyricsDocument?)? = null,
-    ) = LyricsPrefetcher(cache, nextTrack, resolve, enabled, policy, hasLocalLyrics, localLyrics)
+        selectionKey: () -> String = { "" },
+    ) = LyricsPrefetcher(
+        cache = cache,
+        nextTrack = nextTrack,
+        resolve = resolve,
+        enabled = enabled,
+        policy = policy,
+        hasLocalLyrics = hasLocalLyrics,
+        localLyrics = localLyrics,
+        selectionKey = selectionKey,
+    )
 
     private fun query(title: String) = TrackQuery(
         title = title,
@@ -117,7 +143,7 @@ class LyricsPrefetcherTest {
         durationMs = 180_000,
     )
 
-    private fun cached() = CachedLyrics(document(), savedAtEpochMs = System.currentTimeMillis())
+    private fun cached(selectionKey: String = "test-selection") = CachedLyrics(document(), savedAtEpochMs = System.currentTimeMillis(), selectionKey = selectionKey)
 
     private fun document() = LyricsDocument(
         source = LyricsSource.AMLL,

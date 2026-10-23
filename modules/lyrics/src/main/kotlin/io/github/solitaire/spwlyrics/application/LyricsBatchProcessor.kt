@@ -3,6 +3,7 @@ package io.github.solitaire.spwlyrics.application
 import io.github.solitaire.spwlyrics.domain.TrackQuery
 import io.github.solitaire.spwlyrics.domain.LyricsDocument
 import io.github.solitaire.spwlyrics.domain.InstrumentalLyrics
+import io.github.solitaire.spwlyrics.domain.LyricsSimilarity
 import io.github.solitaire.spwlyrics.storage.LyricsCache
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -28,12 +29,26 @@ internal data class LyricsBatchSnapshot(
     val items: List<LyricsBatchItem>,
 )
 
-/** Preloads reliable lyrics into the plugin cache while keeping playback refresh work separate. */
-internal class LyricsBatchProcessor(
+internal fun batchSkipReason(
+    local: LyricsDocument?,
+    policy: AutomaticReplacementPolicy,
+): Pair<String, String>? = when {
+    local != null && InstrumentalLyrics.isPlaceholder(local) ->
+        "纯音乐" to "本地歌词为纯音乐，已跳过在线获取"
+    policy == AutomaticReplacementPolicy.MANUAL_ONLY ->
+        "仅手动选择" to "当前策略不会自动写入歌词，已跳过批量缓存"
+    policy == AutomaticReplacementPolicy.WHEN_LOCAL_MISSING && local != null ->
+        "已有本地歌词" to "当前策略仅在缺少本地歌词时补充，已跳过在线获取"
+    else -> null
+}
+
+/** Preloads reliable lyrics into the plugin cache while keeping playback refresh work separate. */internal class LyricsBatchProcessor(
     private val loadLibrary: () -> List<TrackQuery>,
     private val cache: LyricsCache,
     private val resolver: LyricsResolver,
     private val localLyrics: ((TrackQuery) -> LyricsDocument?)? = null,
+    private val similarityLevel: () -> LyricsSimilarity.Level = { LyricsSimilarity.Level.STANDARD },
+    private val replacementPolicy: () -> AutomaticReplacementPolicy = { AutomaticReplacementPolicy.ALWAYS },
 ) : AutoCloseable {
     private val workers = Executors.newFixedThreadPool(PARALLEL_TRACKS) { task ->
         Thread(task, "spw-lyrics-batch").apply { isDaemon = true }
@@ -149,18 +164,22 @@ internal class LyricsBatchProcessor(
             val index = takeNext(expectedGeneration) ?: break
             val query = synchronized(lock) { items[index].query }
             val local = runCatching { localLyrics?.invoke(query) }.getOrNull()
-            if (local != null && InstrumentalLyrics.isPlaceholder(local)) {
+            val policy = runCatching { replacementPolicy() }.getOrDefault(AutomaticReplacementPolicy.ALWAYS)
+            val skip = batchSkipReason(local, policy)
+            if (skip != null) {
                 synchronized(lock) {
                     if (generation == expectedGeneration) items[index] = items[index].copy(
                         state = LyricsBatchItemState.EXCLUDED,
                         progress = 1.0,
-                        stage = "纯音乐",
-                        message = "本地歌词为纯音乐，已跳过在线获取",
+                        stage = skip.first,
+                        message = skip.second,
                     )
                 }
                 continue
             }
-            val outcome = runCatching { resolveShared(query, expectedGeneration, index, sharedResolutions) }
+            val outcome = runCatching {
+                resolveShared(query, local, similarityLevel(), expectedGeneration, index, sharedResolutions)
+            }
             val resolved = outcome.getOrNull()?.takeIf { it.selectionKey == resolver.selectionKey() && cache.getOverride(query) == null }
             if (resolved != null && isCurrent(expectedGeneration)) {
                 updateProgress(expectedGeneration, index, 0.97, "正在写入缓存", "正在写入缓存")
@@ -222,18 +241,21 @@ internal class LyricsBatchProcessor(
 
     private fun resolveShared(
         query: TrackQuery,
+        reference: LyricsDocument?,
+        similarity: LyricsSimilarity.Level,
         expectedGeneration: Int,
         index: Int,
         shared: ConcurrentHashMap<String, CompletableFuture<ResolvedLyrics?>>,
     ): ResolvedLyrics? {
         val own = CompletableFuture<ResolvedLyrics?>()
-        val existing = shared.putIfAbsent(recordingKey(query), own)
+        val shareKey = if (reference == null) "recording:${recordingKey(query)}" else "local:${query.key}"
+        val existing = shared.putIfAbsent(shareKey, own)
         if (existing != null) {
             updateProgress(expectedGeneration, index, 0.08, "复用搜索结果", "等待相同曲目的搜索结果")
             return existing.get()
         }
         return try {
-            val resolved = resolver.resolveAutomaticFully(query) { progress ->
+            val resolved = resolver.resolveAutomaticFully(query, reference = reference, similarity = similarity) { progress ->
                 updateProgress(expectedGeneration, index, progress.fraction, stageLabel(progress.stage), progress.detail)
             }
             own.complete(resolved)
