@@ -1,0 +1,13 @@
+package io.github.solitaire.spwlyrics.integration.metadataui
+
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import io.github.solitaire.spwlyrics.integration.composeui.DesktopTextArea
+
+@Composable
+internal fun MetadataTextArea(
+    value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier,
+    enabled: Boolean = true, placeholder: String = "", invalid: Boolean = false,
+) {
+    DesktopTextArea(value, onChange, modifier, enabled, placeholder, invalid)
+}

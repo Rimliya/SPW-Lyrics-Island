@@ -2,6 +2,8 @@
 
 <p align="center">为 Salt Player for Windows 自动搜索、匹配并加载多来源歌词。</p>
 
+<p align="center">作者：solitaire + 大肥鱼　|　感谢原作者 GaBoron</p>
+
 <p align="center">
   <a href="https://github.com/Rimliya/SPW-Lyrics/releases/latest"><img src="https://img.shields.io/github/v/release/Rimliya/SPW-Lyrics?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&color=6750A4" alt="最新版本"></a>
   <img src="https://img.shields.io/badge/SPW-1.19.0-3A7AFE" alt="目标 SPW 版本">
