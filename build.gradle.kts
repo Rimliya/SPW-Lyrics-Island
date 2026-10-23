@@ -10,7 +10,7 @@ plugins {
     `java-library`
 }
 
-group = "io.github.gaboron"
+group = "io.github.solitaire"
 version = providers.gradleProperty("version").get()
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
@@ -147,25 +147,25 @@ tasks.test {
 tasks.register<JavaExec>("combinedChecks") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
-    mainClass.set("io.github.gaboron.spwlyricsisland.CombinedChecksKt")
+    mainClass.set("io.github.solitaire.spwlyricsisland.CombinedChecksKt")
     jvmArgs("-Djava.awt.headless=true")
 }
 tasks.register<JavaExec>("spoutChecks") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
-    mainClass.set("io.github.gaboron.spwisland.ui.SpoutChecksKt")
+    mainClass.set("io.github.solitaire.spwisland.ui.SpoutChecksKt")
     jvmArgs("-Djava.awt.headless=true")
 }
 tasks.register<JavaExec>("spoutSoak") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
-    mainClass.set("io.github.gaboron.spwisland.ui.SpoutSoak")
+    mainClass.set("io.github.solitaire.spwisland.ui.SpoutSoak")
     args(providers.gradleProperty("soakSeconds").orElse("660").get())
 }
 tasks.register<JavaExec>("spoutLifecycle") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
-    mainClass.set("io.github.gaboron.spwisland.ui.SpoutLifecycle")
+    mainClass.set("io.github.solitaire.spwisland.ui.SpoutLifecycle")
 }
 
 tasks.register<Exec>("buildSpectrum") {
@@ -231,11 +231,11 @@ tasks.register<Exec>("buildWindowsGlass") {
 }
 
 spmod {
-    PluginClass = "io.github.gaboron.spwlyricsisland.SPWLyricsIslandPlugin"
-    PluginId = "io.github.gaboron.spwlyricsisland"
+    PluginClass = "io.github.solitaire.spwlyricsisland.SPWLyricsIslandPlugin"
+    PluginId = "io.github.solitaire.spwlyricsisland"
     PluginName = "SPW Lyrics Island"
     PluginVersion = project.version.toString()
-    PluginProvider = "GaBoron / Solitaire"
+    PluginProvider = "solitaire + 大肥鱼（感谢原作者 GaBoron）"
     PluginDescription = "Lyrics island plus multi-source lyrics fetching for Salt Player for Windows; Windows x64 with OBS Spout2 output."
     PluginHasConfig = true
     PluginOpenSourceUrl = projectUrl.get()
