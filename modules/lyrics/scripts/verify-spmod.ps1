@@ -30,10 +30,10 @@ try {
 
     $manifest = Read-Entry "classes/META-INF/MANIFEST.MF"
     $expected = [ordered]@{
-        "Plugin-Class" = "dev.gaboron.spwlyrics.integration.SpwLyricsPlugin"
-        "Plugin-Id" = "spw-lyrics"
+        "Plugin-Class" = "io.github.solitaire.spwlyrics.integration.SpwLyricsPlugin"
+        "Plugin-Id" = "io.github.solitaire.spwlyrics"
         "Plugin-Version" = $version
-        "Plugin-Provider" = "GaBoron / Solitaire"
+        "Plugin-Provider" = "solitaire + 大肥鱼（感谢原作者 GaBoron）"
         "Plugin-Open-Source-Url" = "https://github.com/Rimliya/SPW-Lyrics"
     }
     foreach ($key in $expected.Keys) {
@@ -42,7 +42,7 @@ try {
     }
 
     $extension = (Read-Entry "classes/META-INF/extensions.idx").Trim()
-    if ($extension -ne "dev.gaboron.spwlyrics.integration.SpwLyricsExtension") {
+    if ($extension -ne "io.github.solitaire.spwlyrics.integration.SpwLyricsExtension") {
         throw "Unexpected extensions.idx: $extension"
     }
     $preferences = Read-Entry "classes/preference_config.json" | ConvertFrom-Json
