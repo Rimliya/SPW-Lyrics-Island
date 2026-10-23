@@ -20,19 +20,19 @@ internal class LyricsWorkspace(private val createSession: () -> LyricsWorkspaceS
             onFailure("歌词管理主窗口入口尚未启用，请检查类变换权限及插件启动提示。")
             return@onEdt
         }
-        if (session == null && runCatching(beforeOpen).onFailure {
+        if (runCatching(beforeOpen).onFailure {
             onFailure("歌词管理页面未能打开：${it.cause?.message ?: it.message}")
         }.isFailure) return@onEdt
         val active = session ?: createSession().also { session = it }
         active.select(page ?: active.page)
     }
 
-    fun importSearch(query: TrackQuery, document: LyricsDocument) = onEdt {
+    fun importSearch(query: TrackQuery, candidate: io.github.solitaire.spwlyrics.domain.LyricsCandidate, document: LyricsDocument?) = onEdt {
         open()
         session?.let { active ->
             active.select(LyricsToolPage.METADATA, initialize = false)
             if (active.metadata.state.busy) onFailure("元数据正在读写，请完成后重试导入。")
-            else active.metadata.importSearch(query, document)
+            else active.metadata.importSearch(query, candidate, document)
         }
     }
 

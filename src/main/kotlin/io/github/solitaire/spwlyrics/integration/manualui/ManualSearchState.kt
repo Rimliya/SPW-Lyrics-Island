@@ -4,6 +4,7 @@ import io.github.solitaire.spwlyrics.domain.CandidateScore
 import io.github.solitaire.spwlyrics.domain.LyricsDocument
 import io.github.solitaire.spwlyrics.domain.LyricsSource
 import io.github.solitaire.spwlyrics.domain.TrackQuery
+import io.github.solitaire.spwlyrics.domain.ProviderSearchStatus
 import io.github.solitaire.spwlyrics.storage.LyricsDelaySettings
 
 internal data class ManualSearchState(
@@ -11,6 +12,7 @@ internal data class ManualSearchState(
     val keywords: String = "",
     val source: LyricsSource? = null,
     val candidates: List<CandidateScore> = emptyList(),
+    val sourceStatuses: Map<LyricsSource, ProviderSearchStatus> = ProviderSearchStatus.unchecked(),
     val selected: CandidateScore? = null,
     val document: LyricsDocument? = null,
     val previewMainAgent: String = "v1",

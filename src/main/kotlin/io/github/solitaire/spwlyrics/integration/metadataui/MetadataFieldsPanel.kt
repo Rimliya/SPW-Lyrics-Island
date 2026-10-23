@@ -12,15 +12,17 @@ import io.github.solitaire.spwlyrics.integration.composeui.DesktopField
 @Composable
 internal fun MetadataFieldsPanel(controller: MetadataEditorController, modifier: Modifier) {
     val state = controller.state
+    val inputModifier = Modifier.fillMaxWidth().heightIn(min = 40.dp)
     LyricsScroll(modifier) {
+        MetadataImportPanel(controller)
         AudioMetadataField.entries.forEach { field ->
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(field.label, color = SaltTheme.colors.subText, style = SaltTheme.textStyles.sub)
-                val multiple = field in listOf(AudioMetadataField.ARTIST, AudioMetadataField.ALBUM_ARTIST, AudioMetadataField.COMPOSER, AudioMetadataField.COMMENT)
+                val multiple = field in listOf(AudioMetadataField.ARTIST, AudioMetadataField.ALBUM_ARTIST, AudioMetadataField.COMPOSER, AudioMetadataField.LYRICIST, AudioMetadataField.GENRE, AudioMetadataField.COMMENT)
                 if (multiple) MetadataTextArea(state.draft[field], { controller.field(field, it) },
-                    Modifier.fillMaxWidth().height(if (field == AudioMetadataField.COMMENT) 80.dp else 58.dp),
-                    enabled = state.loaded != null && !state.busy, placeholder = "填写${field.label}")
-                else DesktopField(state.draft[field], { controller.field(field, it) }, Modifier.fillMaxWidth(),
+                    inputModifier,
+                    enabled = state.loaded != null && !state.busy, placeholder = "填写${field.label}", growWithContent = true)
+                else DesktopField(state.draft[field], { controller.field(field, it) }, inputModifier,
                     enabled = state.loaded != null && !state.busy, placeholder = "填写${field.label}")
             }
         }

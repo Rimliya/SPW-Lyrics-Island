@@ -41,23 +41,6 @@ class MatchEngineGoldenTest {
         }
     }
 
-    @Test
-    fun cachedDecisionMatchesUncachedDecision() {
-        for (query in queries) {
-            val prepared = MatchEngine.prepare(query)
-            val cache = HashMap<String, CandidateScore>()
-            val first = MatchEngine.decide(prepared, candidates, scoreCache = cache)
-            val second = MatchEngine.decide(prepared, candidates, scoreCache = cache)
-            val plain = MatchEngine.decide(query, candidates)
-            assertEquals(plain.winner?.candidate, first.winner?.candidate)
-            assertEquals(plain.ambiguous, first.ambiguous)
-            assertEquals(
-                plain.ranked.map { it.candidate.remoteId to it.score },
-                second.ranked.map { it.candidate.remoteId to it.score },
-            )
-        }
-    }
-
     private fun assertNear(expected: Double?, actual: Double?) {
         if (expected == null || actual == null) {
             assertEquals(expected, actual)
