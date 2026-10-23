@@ -8,6 +8,7 @@ import io.github.solitaire.spwlyrics.application.AutomaticReplacementPolicy
 import io.github.solitaire.spwlyrics.application.LyricsLoadPhase
 import io.github.solitaire.spwlyrics.application.LyricsLoadCoordinator
 import io.github.solitaire.spwlyrics.application.LyricsBatchProcessor
+import io.github.solitaire.spwlyrics.application.LyricsPerformanceMonitor
 import io.github.solitaire.spwlyrics.application.LyricsPrefetcher
 import io.github.solitaire.spwlyrics.application.LyricsResolver
 import io.github.solitaire.spwlyrics.application.LyricsOutputRouter
@@ -46,6 +47,7 @@ object PluginRuntime {
     @Volatile private var hostUi: HostUiIntegration? = null
     @Volatile private var settings: PluginSettings? = null
     @Volatile private var prefetcher: LyricsPrefetcher? = null
+    @Volatile private var performanceMonitor: LyricsPerformanceMonitor? = null
     @Volatile private var cacheFolderOpener: CacheFolderOpener? = null
     private val libraryTracks = SpwLibraryTrackSource()
     private val nextTracks = SpwNextTrackSource(libraryTracks)
@@ -79,6 +81,8 @@ object PluginRuntime {
             LocalLyricsProvider(),
         )
         val resolver = LyricsResolver(providers, preferences = { settings?.lyricsPreferences() ?: io.github.solitaire.spwlyrics.domain.LyricsPreferences() })
+        performanceMonitor = LyricsPerformanceMonitor(root.resolve("lyrics-performance.log"), resolver::searchMetrics)
+            .also { it.start() }
         val refreshBridge = ReflectiveLyricsRefreshBridge()
         val output = LyricsOutputRouter(
             receiver = JmxTtmlReceiver(),
@@ -113,12 +117,16 @@ object PluginRuntime {
             policy = { settings?.automaticReplacementPolicy() ?: AutomaticReplacementPolicy.ALWAYS },
             hasLocalLyrics = { query -> localLyrics(query) != null },
             localLyrics = ::localLyrics,
+            selectionKey = resolver::selectionKey,
             delayMillis = PREFETCH_DELAY_MILLIS,
         )
         val batch = LyricsBatchProcessor(
             loadLibrary = libraryTracks::load,
             cache = cache,
             resolver = resolver,
+            localLyrics = ::localLyrics,
+            similarityLevel = { settings?.similarityLevel() ?: LyricsSimilarity.Level.STANDARD },
+            replacementPolicy = { settings?.automaticReplacementPolicy() ?: AutomaticReplacementPolicy.ALWAYS },
         )
         batchProcessor = batch
         val describeBatchFailure: (Throwable) -> String = { error ->
@@ -223,6 +231,8 @@ object PluginRuntime {
         cacheFolderOpener = null
         prefetcher?.close()
         prefetcher = null
+        performanceMonitor?.close()
+        performanceMonitor = null
         settings?.close()
         settings = null
         batchProcessor?.close()
