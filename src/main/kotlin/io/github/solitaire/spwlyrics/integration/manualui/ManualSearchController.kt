@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.solitaire.spwlyrics.domain.CandidateScore
 import io.github.solitaire.spwlyrics.domain.LyricsSource
+import io.github.solitaire.spwlyrics.domain.ProviderSearchStatus
+import io.github.solitaire.spwlyrics.domain.ProviderSearchPhase
 import io.github.solitaire.spwlyrics.codec.TtmlVocalParts
 import io.github.solitaire.spwlyrics.storage.LyricsDelaySettings
 import java.awt.EventQueue
@@ -40,8 +42,20 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
         }, { state = state.copy(readingTrack = false); reportFailure(it) })
     }
 
-    fun keywords(value: String) { state = state.copy(keywords = value) }
-    fun source(value: LyricsSource?) { state = state.copy(source = value) }
+    fun keywords(value: String) {
+        if (value != state.keywords) { invalidateSearch(); state = state.copy(keywords = value) }
+    }
+    fun source(value: LyricsSource?) {
+        if (value != state.source) { invalidateSearch(); state = state.copy(source = value) }
+    }
+
+    private fun invalidateSearch() {
+        searchGeneration++
+        previewGeneration++
+        state = state.copy(candidates = emptyList(), selected = null, document = null,
+            searching = false, previewing = false, searched = false, sourceStatuses = ProviderSearchStatus.unchecked(),
+            status = "搜索条件已更改，请点击搜索。", error = false)
+    }
     fun delayText(value: String) {
         if (value.length <= 7 && value.matches(Regex("-?\\d*"))) state = state.copy(delayText = value)
     }
@@ -60,11 +74,21 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
         val generation = ++searchGeneration
         previewGeneration++
         state = state.copy(candidates = emptyList(), selected = null, document = null,
+            sourceStatuses = ProviderSearchStatus.unchecked(),
             searching = true, previewing = false, searched = false, status = "正在搜索…", error = false)
-        submit({ searchGeneration == generation }, { operations.search(query, keywords, source) }, { rows ->
+        submit({ searchGeneration == generation }, { operations.search(query, keywords, source) { update ->
+            EventQueue.invokeLater {
+                if (!closed && searchGeneration == generation) state = state.copy(sourceStatuses = state.sourceStatuses + (update.source to update))
+            }
+        } }, { rows ->
             state = state.copy(candidates = rows, searching = false, searched = true,
-                status = if (rows.isEmpty()) "没有找到候选，请缩短关键词或换一个来源。" else "找到 ${rows.size} 个候选，请核对录音版本后应用。")
-        }, { state = state.copy(searching = false, searched = true); reportFailure(it) })
+                status = if (rows.isEmpty()) "没有找到候选，请缩短关键词或换一个来源。" else "")
+        }, { error ->
+            state = state.copy(searching = false, searched = true, sourceStatuses = state.sourceStatuses.mapValues { (_, status) ->
+                if (status.phase == ProviderSearchPhase.SEARCHING) status.copy(phase = ProviderSearchPhase.FAILED, detail = "搜索未完成，请重试。") else status
+            })
+            reportFailure(error)
+        })
     }
 
     fun select(row: CandidateScore) {
@@ -81,6 +105,7 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
     fun apply() {
         val query = state.query ?: return
         val candidate = state.selected?.candidate ?: return
+        if (!candidate.source.hasLyrics || state.document == null || state.busy) return
         mutate("歌词已应用并保存为当前歌曲的手动选择。", action = { operations.apply(query, candidate) })
     }
 
@@ -107,8 +132,14 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
     fun editMetadata() {
         if (state.busy) return
         val query = state.query ?: return
-        val document = state.document ?: return
-        operations.editMetadata(query, document)
+        val candidate = state.selected?.candidate ?: return
+        val document = state.document
+        val generation = searchGeneration
+        state = state.copy(mutating = true, error = false, status = "正在获取在线元数据…")
+        submit({ searchGeneration == generation }, { operations.metadata(candidate) }, { enriched ->
+            state = state.copy(mutating = false, status = "在线元数据已读取。")
+            operations.editMetadata(query, enriched, document)
+        }, { state = state.copy(mutating = false); reportFailure(it) })
     }
 
     private fun mutate(message: String, action: () -> Boolean, success: () -> Unit = {}) {

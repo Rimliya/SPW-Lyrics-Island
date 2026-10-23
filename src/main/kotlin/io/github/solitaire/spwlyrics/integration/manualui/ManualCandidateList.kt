@@ -20,9 +20,9 @@ import io.github.solitaire.spwlyrics.integration.workspace.*
 
 @Composable
 internal fun ManualCandidateList(state: ManualSearchState, select: (CandidateScore) -> Unit, modifier: Modifier) {
-    var sort by rememberSaveable { mutableStateOf(CandidateColumn.SCORE) }
+    var sort by rememberSaveable { mutableStateOf(CandidateColumn.PREFERENCE) }
     val rows = remember(state.candidates, sort) {
-        state.candidates.sortedWith(if (sort == CandidateColumn.SCORE) sort.comparator().reversed() else sort.comparator())
+        if (sort == CandidateColumn.PREFERENCE) state.candidates else state.candidates.sortedWith(if (sort == CandidateColumn.SCORE) sort.comparator().reversed() else sort.comparator())
     }
     val list = rememberLazyListState()
     val focus = remember { FocusRequester() }
@@ -56,7 +56,7 @@ internal fun ManualCandidateList(state: ManualSearchState, select: (CandidateSco
                         LazyColumn(Modifier.fillMaxSize().padding(end = 10.dp), state = list, contentPadding = PaddingValues(4.dp)) {
                             items(rows) { row ->
                                 ManualCandidateRow(row, row == state.selected, !state.mutating) { focus.requestFocus(); select(row) }
-                                ItemDivider()
+                                LyricsListDivider()
                             }
                         }
                         VerticalScrollbar(rememberScrollbarAdapter(list), Modifier.align(Alignment.CenterEnd).fillMaxHeight())

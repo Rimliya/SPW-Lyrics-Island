@@ -126,7 +126,9 @@ internal class LyricsBatchProcessor(
                     stage = "未选择",
                     message = "未选择",
                 )
-                !includeCached && cache.hasLyrics(query) -> LyricsBatchItem(
+                cache.getOverride(query) != null -> LyricsBatchItem(query, LyricsBatchItemState.EXCLUDED,
+                    selected = false, stage = "保留单曲选择", message = "保留手动选择或本地歌词")
+                !includeCached && cache.getLyrics(query)?.let { it.selectionKey == resolver.selectionKey() } == true -> LyricsBatchItem(
                     query,
                     LyricsBatchItemState.CACHED,
                     progress = 1.0,
@@ -159,7 +161,7 @@ internal class LyricsBatchProcessor(
                 continue
             }
             val outcome = runCatching { resolveShared(query, expectedGeneration, index, sharedResolutions) }
-            val resolved = outcome.getOrNull()
+            val resolved = outcome.getOrNull()?.takeIf { it.selectionKey == resolver.selectionKey() && cache.getOverride(query) == null }
             if (resolved != null && isCurrent(expectedGeneration)) {
                 updateProgress(expectedGeneration, index, 0.97, "正在写入缓存", "正在写入缓存")
             }
