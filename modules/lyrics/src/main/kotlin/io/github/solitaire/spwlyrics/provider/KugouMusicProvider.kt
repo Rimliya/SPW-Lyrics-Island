@@ -4,32 +4,20 @@ import io.github.solitaire.spwlyrics.codec.LyricsContentFilter
 import io.github.solitaire.spwlyrics.codec.KrcCodec
 import io.github.solitaire.spwlyrics.domain.LyricsCandidate
 import io.github.solitaire.spwlyrics.domain.LyricsDocument
-import io.github.solitaire.spwlyrics.domain.LyricsQuality
 import io.github.solitaire.spwlyrics.domain.LyricsSource
 import io.github.solitaire.spwlyrics.domain.TrackQuery
 import kotlinx.serialization.json.JsonObject
 
 class KugouMusicProvider(private val http: ProviderHttp) : LyricsProvider {
     override val source = LyricsSource.KUGOU
+    private val searchClient = KugouSearchClient(http)
+    private val details = KugouMetadataClient(http)
 
-    override fun search(query: TrackQuery, keywords: String, limit: Int): List<LyricsCandidate> = runCatching {
-        val url = "$SEARCH_URL?keyword=${ProviderHttpClient.encode(keywords)}&page=1&pagesize=$limit"
-        val root = providerJson.parseToJsonElement(http.get(url)) as JsonObject
-        root.obj("data")?.array("lists").orEmpty().mapNotNull { element ->
-            val song = element.asObject() ?: return@mapNotNull null
-            val hash = song.string("FileHash") ?: song.string("EMixSongID") ?: return@mapNotNull null
-            LyricsCandidate(
-                source = source,
-                remoteId = hash,
-                title = song.string("SongName").orEmpty(),
-                artists = TrackQuery.splitArtists(song.string("SingerName").orEmpty()),
-                album = song.string("AlbumName").orEmpty(),
-                durationMs = song.long("Duration")?.times(1_000),
-                qualityHint = LyricsQuality.KARAOKE_SYNCED,
-                context = mapOf("hash" to hash),
-            )
-        }
-    }.getOrDefault(emptyList())
+    override fun metadata(candidate: LyricsCandidate) = details.load(candidate)
+
+    override fun search(query: TrackQuery, keywords: String, limit: Int): List<LyricsCandidate> {
+        return searchClient.search(keywords, limit)
+    }
 
     override fun fetch(candidate: LyricsCandidate): LyricsDocument? = runCatching {
         val hash = candidate.context["hash"] ?: candidate.remoteId

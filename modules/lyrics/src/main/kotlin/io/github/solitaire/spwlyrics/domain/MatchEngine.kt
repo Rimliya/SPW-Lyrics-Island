@@ -10,10 +10,11 @@ data class CandidateScore(
     val albumScore: Double?,
     val durationScore: Double?,
     val versionConflict: Boolean,
+    val artistConflict: Boolean = false,
 ) {
     val passesAutomaticGate: Boolean
         get() {
-            if (versionConflict) return false
+            if (versionConflict || artistConflict) return false
             if (durationScore != null && durationScore < MatchEngine.MIN_DURATION) return false
             val titleAndArtist = titleScore >= MatchEngine.MIN_TITLE &&
                 artistScore != null && artistScore >= MatchEngine.MIN_ARTIST &&
@@ -34,15 +35,6 @@ data class MatchDecision(
     val ambiguous: Boolean,
 )
 
-/** Prepared once per resolve so repeated candidate scoring does not re-normalize the query. */
-class PreparedQuery internal constructor(
-    val query: TrackQuery,
-    internal val title: TextNormalizer.PreparedText,
-    internal val album: TextNormalizer.PreparedText?,
-    internal val artists: List<TextNormalizer.PreparedText>,
-    internal val versionTokens: Set<String>,
-)
-
 object MatchEngine {
     const val RELAXED_TITLE = 0.78
     const val MIN_TITLE = 0.84
@@ -56,25 +48,15 @@ object MatchEngine {
     const val MIN_DURATION = 0.60
     const val MIN_GAP = 0.04
 
-    fun prepare(query: TrackQuery): PreparedQuery = PreparedQuery(
-        query = query,
-        title = TextNormalizer.prepare(query.title),
-        album = query.album.takeIf(String::isNotBlank)?.let(TextNormalizer::prepare),
-        artists = (query.artists + query.albumArtists)
-            .distinctBy(TextNormalizer::compact)
-            .map(TextNormalizer::prepare),
-        versionTokens = TextNormalizer.versionTokens(query.title),
-    )
-
-    fun score(query: TrackQuery, candidate: LyricsCandidate): CandidateScore = score(prepare(query), candidate)
-
-    fun score(query: PreparedQuery, candidate: LyricsCandidate): CandidateScore {
-        val title = TextNormalizer.similarity(query.title, TextNormalizer.prepare(candidate.title))
+    fun score(query: TrackQuery, candidate: LyricsCandidate): CandidateScore {
+        val title = TextNormalizer.similarity(query.title, candidate.title)
         val artist = artistSimilarity(query, candidate)
-        val album = query.album
-            ?.takeIf { candidate.album.isNotBlank() }
-            ?.let { TextNormalizer.similarity(it, TextNormalizer.prepare(candidate.album)) }
-        val duration = durationSimilarity(query.query.durationMs, candidate.durationMs)
+        val album = if (query.album.isBlank() || candidate.album.isBlank()) {
+            null
+        } else {
+            TextNormalizer.similarity(query.album, candidate.album)
+        }
+        val duration = durationSimilarity(query.durationMs, candidate.durationMs)
 
         val components = buildList {
             add(title to 0.55)
@@ -85,38 +67,30 @@ object MatchEngine {
         val totalWeight = components.sumOf { it.second }
         val raw = components.sumOf { (value, weight) -> value * weight } / totalWeight
 
-        val remoteVersions = TextNormalizer.versionTokens(candidate.title)
-        val conflict = query.versionTokens != remoteVersions &&
-            (query.versionTokens.isNotEmpty() || remoteVersions.isNotEmpty())
+        val localVersions = TextNormalizer.versionTokens(query.title) + TextNormalizer.versionTokens(query.album)
+        val remoteVersions = TextNormalizer.versionTokens(candidate.title) + TextNormalizer.versionTokens(candidate.album)
+        val conflict = localVersions != remoteVersions && (localVersions.isNotEmpty() || remoteVersions.isNotEmpty())
 
-        return CandidateScore(candidate, if (conflict) raw - 0.25 else raw, title, artist, album, duration, conflict)
+        val artistConflict = query.artists.size >= 2 && candidate.artists.size >= 2 && query.artists.any { local ->
+            candidate.artists.none { remote -> TextNormalizer.similarity(local, remote) >= MIN_ARTIST }
+        }
+        return CandidateScore(candidate, if (conflict || artistConflict) raw - 0.25 else raw, title, artist, album, duration, conflict, artistConflict)
     }
 
     fun decide(
         query: TrackQuery,
         candidates: List<LyricsCandidate>,
         accepts: (CandidateScore) -> Boolean = CandidateScore::passesAutomaticGate,
-        scoreCache: MutableMap<String, CandidateScore>? = null,
-    ): MatchDecision = decide(prepare(query), candidates, accepts, scoreCache)
-
-    fun decide(
-        query: PreparedQuery,
-        candidates: List<LyricsCandidate>,
-        accepts: (CandidateScore) -> Boolean = CandidateScore::passesAutomaticGate,
-        scoreCache: MutableMap<String, CandidateScore>? = null,
     ): MatchDecision {
-        val track = query.query
-        if (track.title.isBlank() || (track.artists.isEmpty() && track.album.isBlank())) {
+        if (query.title.isBlank() || (query.artists.isEmpty() && query.album.isBlank())) {
             return MatchDecision(null, emptyList(), false)
         }
-        val ranked = candidates.map { candidate ->
-            val key = scoreKey(candidate)
-            scoreCache?.get(key) ?: score(query, candidate).also { scoreCache?.put(key, it) }
-        }.sortedWith(
-            compareByDescending<CandidateScore> { it.score }
-                .thenByDescending { it.candidate.qualityHint?.rank ?: -1 }
-                .thenBy { it.candidate.remoteId },
-        )
+        val ranked = candidates.map { score(query, it) }
+            .sortedWith(
+                compareByDescending<CandidateScore> { it.score }
+                    .thenByDescending { it.candidate.qualityHint?.rank ?: -1 }
+                    .thenBy { it.candidate.remoteId },
+            )
         val best = ranked.firstOrNull() ?: return MatchDecision(null, ranked, false)
         if (!accepts(best)) return MatchDecision(null, ranked, false)
         val second = ranked.drop(1).firstOrNull {
@@ -126,20 +100,19 @@ object MatchEngine {
         return MatchDecision(if (ambiguous) null else best, ranked, ambiguous)
     }
 
-    fun scoreKey(candidate: LyricsCandidate): String = "${candidate.source.name}\u0000${candidate.remoteId}"
+    private fun artistSimilarity(query: TrackQuery, candidate: LyricsCandidate): Double? {
+        val localArtists = (query.artists + query.albumArtists)
+            .distinctBy(TextNormalizer::compact)
+        if (localArtists.isEmpty() || candidate.artists.isEmpty()) return null
 
-    private fun artistSimilarity(query: PreparedQuery, candidate: LyricsCandidate): Double? {
-        if (query.artists.isEmpty() || candidate.artists.isEmpty()) return null
-        val remoteArtists = candidate.artists.map(TextNormalizer::prepare)
-
-        val localCoverage = query.artists.map { local ->
-            remoteArtists.maxOf { remote -> TextNormalizer.similarity(local, remote) }
+        val localCoverage = localArtists.map { local ->
+            candidate.artists.maxOf { remote -> TextNormalizer.similarity(local, remote) }
         }.average()
-        val remoteCoverage = remoteArtists.map { remote ->
-            query.artists.maxOf { local -> TextNormalizer.similarity(local, remote) }
+        val remoteCoverage = candidate.artists.map { remote ->
+            localArtists.maxOf { local -> TextNormalizer.similarity(local, remote) }
         }.average()
-        val strongestPair = query.artists.maxOf { local ->
-            remoteArtists.maxOf { remote -> TextNormalizer.similarity(local, remote) }
+        val strongestPair = localArtists.maxOf { local ->
+            candidate.artists.maxOf { remote -> TextNormalizer.similarity(local, remote) }
         }
         val balancedCoverage = minOf(localCoverage, remoteCoverage) * 0.35 +
             maxOf(localCoverage, remoteCoverage) * 0.65

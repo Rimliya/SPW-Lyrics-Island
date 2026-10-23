@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import io.github.solitaire.spwlyrics.integration.composeui.DesktopGlyph
 import io.github.solitaire.spwlyrics.integration.composeui.DesktopIcon
 import io.github.solitaire.spwlyrics.integration.workspace.LyricsWorkspace
+import io.github.solitaire.spwlyrics.integration.workspace.LyricsToolPage
 import java.lang.invoke.MethodType
 import java.lang.reflect.Method
 
@@ -22,13 +23,14 @@ internal class HostUiBridge(val targets: HostUiDiscovery.Targets, private val lo
     private val themeConfigs = method(targets.theme().configs())
     private val themeDark = method(targets.theme().dark())
     private val navigate = method(targets.navigate())
+    private val collapsePlayer = method(targets.collapsePlayer())
     private val stack = field(targets.backStack())
     private val navigatorType = stack.declaringClass
     private val locals = targets.locals().map(::field)
     var replaying = false
         private set
     private var navigator: Any? = null
-    private val openPage: () -> Unit = { workspace.open() }
+    private val openPage: () -> Unit = { workspace.open(LyricsToolPage.BATCH) }
 
     fun method(key: HostBytecodeIndex.Method): Method {
         val signature = MethodType.fromMethodDescriptorString(key.descriptor(), loader)
@@ -54,8 +56,10 @@ internal class HostUiBridge(val targets: HostUiDiscovery.Targets, private val lo
     fun enter() {
         val host = checkNotNull(navigator) { "主窗口尚未准备好，请稍后重试" }
         val current = (stack.get(host) as List<*>).lastOrNull() ?: return
-        // A same-route request closes other host-composed tools before the host's early return.
-        replay { navigate.invoke(host, current) }
+        replay {
+            collapsePlayer.invoke(host)
+            navigate.invoke(host, current)
+        }
     }
 
     fun replay(action: () -> Unit) {
