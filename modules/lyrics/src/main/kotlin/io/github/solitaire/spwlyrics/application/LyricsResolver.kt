@@ -35,6 +35,7 @@ class LyricsResolver(
     private val providers = providers.associateBy(LyricsProvider::source)
     private val manualCandidateInspector = ManualCandidateInspector()
     private val providerTasks = ProviderTaskPool()
+    private val searchCache = ProviderSearchCache()
 
     fun resolveAutomaticProgressively(
         query: TrackQuery,
@@ -75,7 +76,9 @@ class LyricsResolver(
         completionDeadlineNanos: Long = Long.MAX_VALUE,
     ): ResolvedLyrics? {
         val order = preferences()
-        val selected = order.sources.filter { it != LyricsSource.LOCAL && it.hasLyrics }.mapNotNull(providers::get)
+        val selected = order.sources.filter { it != LyricsSource.LOCAL && it.hasLyrics }
+            .mapNotNull(providers::get)
+            .filter { provider -> provider.configurationStatus() == null }
         val preparedReference = LyricsSimilarity.prepare(reference)
         onProgress(LyricsResolutionProgress(LyricsResolutionStage.SEARCHING, 0.04, "开始并行搜索 ${selected.size} 个歌词来源"))
         val completed = providerTasks.collectProgressively(
@@ -148,7 +151,9 @@ class LyricsResolver(
     )
 
     private fun search(provider: LyricsProvider, query: TrackQuery, keywords: String): List<LyricsCandidate> =
-        runCatching { provider.search(query, keywords) }.getOrDefault(emptyList())
+        searchCache.getOrLoad(provider, query, keywords, AUTOMATIC_RESULTS_PER_SOURCE)
+
+    internal fun searchMetrics(): ProviderSearchCache.Snapshot = searchCache.snapshot()
 
     private fun resolved(fetched: FetchedLyrics): ResolvedLyrics? =
         fetched.document.takeIf { it.lines.any { line -> line.text.isNotBlank() } }
@@ -191,6 +196,7 @@ class LyricsResolver(
     }
 
     override fun close() {
+        searchCache.clear()
         providerTasks.close()
         providers.values.filterIsInstance<AutoCloseable>().forEach { provider -> runCatching { provider.close() } }
     }
@@ -215,6 +221,7 @@ class LyricsResolver(
     }
 
     private companion object {
+        const val AUTOMATIC_RESULTS_PER_SOURCE = 20
         const val PROVIDER_SEARCH_BUDGET_MILLIS = 12_000L
         const val FULL_SEARCH_TIMEOUT_MILLIS = 20_000L
     }
