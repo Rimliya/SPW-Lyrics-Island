@@ -24,6 +24,7 @@ class LyricsPrefetcher(
     private val policy: () -> AutomaticReplacementPolicy,
     private val hasLocalLyrics: (TrackQuery) -> Boolean = { false },
     private val localLyrics: ((TrackQuery) -> LyricsDocument?)? = null,
+    private val selectionKey: () -> String = { "" },
     private val delayMillis: Long = 0,
 ) : AutoCloseable {
     private val executor: ExecutorService = Executors.newCachedThreadPool { task ->
@@ -73,14 +74,22 @@ class LyricsPrefetcher(
             (local != null || runCatching { hasLocalLyrics(next) }.getOrDefault(false))) {
             return false
         }
-        if (cache.hasLyrics(next) || cache.getOverride(next) != null) {
+        if (hasReusableLyrics(next) || cache.getOverride(next) != null) {
             return false
         }
         val cached = runCatching { resolve(next) }.getOrNull() ?: return false
         if (!enabled() || generation.get() != token || Thread.currentThread().isInterrupted) return false
-        if (cache.hasLyrics(next) || cache.getOverride(next) != null) return false
+        val expectedSelection = selectionKey()
+        if (expectedSelection.isNotBlank() && cached.selectionKey != expectedSelection) return false
+        if (hasReusableLyrics(next) || cache.getOverride(next) != null) return false
         cache.putLyrics(next, cached)
         return true
+    }
+
+    private fun hasReusableLyrics(query: TrackQuery): Boolean {
+        val expected = selectionKey()
+        val cached = runCatching { cache.getLyrics(query) }.getOrNull() ?: return false
+        return expected.isBlank() || cached.selectionKey == expected
     }
 
     override fun close() {
