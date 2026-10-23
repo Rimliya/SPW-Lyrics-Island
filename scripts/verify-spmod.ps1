@@ -37,7 +37,7 @@ try {
         if ($configNames -notcontains $required) { throw "Merged preferences are missing $required" }
     }
 
-    $extensionClass = "io.github.gaboron.spwlyricsisland.SPWLyricsIslandPlaybackExtension"
+    $extensionClass = "io.github.solitaire.spwlyricsisland.SPWLyricsIslandPlaybackExtension"
     $extensionIndex = (Read-Entry "classes/META-INF/extensions.idx").Trim()
     if ($extensionIndex -ne $extensionClass) {
         throw "Unexpected extensions.idx: $extensionIndex"
@@ -45,10 +45,10 @@ try {
 
     $manifest = Read-Entry "classes/META-INF/MANIFEST.MF"
     $expectedManifest = [ordered]@{
-        "Plugin-Class" = "io.github.gaboron.spwlyricsisland.SPWLyricsIslandPlugin"
-        "Plugin-Id" = "io.github.gaboron.spwlyricsisland"
+        "Plugin-Class" = "io.github.solitaire.spwlyricsisland.SPWLyricsIslandPlugin"
+        "Plugin-Id" = "io.github.solitaire.spwlyricsisland"
         "Plugin-Version" = $version
-        "Plugin-Provider" = "GaBoron / Solitaire"
+        "Plugin-Provider" = "solitaire + 大肥鱼（感谢原作者 GaBoron）"
         "Plugin-Open-Source-Url" = "https://github.com/Rimliya/SPW-Lyrics-Island"
     }
     foreach ($key in $expectedManifest.Keys) {

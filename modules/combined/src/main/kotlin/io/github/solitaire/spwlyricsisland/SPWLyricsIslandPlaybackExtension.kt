@@ -1,8 +1,8 @@
-package io.github.gaboron.spwlyricsisland
+package io.github.solitaire.spwlyricsisland
 
 import com.xuncorp.spw.workshop.api.PlaybackExtensionPoint
-import dev.gaboron.spwlyrics.integration.SpwLyricsExtension
-import io.github.gaboron.spwisland.host.IslandPlaybackExtension
+import io.github.solitaire.spwlyrics.integration.SpwLyricsExtension
+import io.github.solitaire.spwisland.host.IslandPlaybackExtension
 
 /**
  * Single host-facing extension. Each upstream module still owns its callback implementation;

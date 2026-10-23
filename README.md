@@ -2,7 +2,7 @@
 
 将 **灵动词岛** 与 **SPW Lyrics** 合并为一个 `.spmod`：歌词岛负责显示，SPW Lyrics 负责从多个来源搜索、匹配、缓存并刷新逐字歌词。
 
-> 插件作者元数据：`GaBoron / Solitaire`。本项目是基于两个上游模块的合并发行版，Windows x64 专用，保留 OBS Spout2 透明输出。
+> 插件作者：`solitaire + 大肥鱼`。本项目是基于两个上游模块的合并发行版，Windows x64 专用，保留 OBS Spout2 透明输出。感谢原作者 GaBoron。
 
 <p align="center">
   <a href="https://github.com/Rimliya/SPW-Lyrics-Island/releases/latest"><img src="https://img.shields.io/github/v/release/Rimliya/SPW-Lyrics-Island?label=Release" alt="Release"></a>

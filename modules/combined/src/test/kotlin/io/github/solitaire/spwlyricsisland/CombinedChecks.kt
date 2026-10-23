@@ -1,4 +1,4 @@
-package io.github.gaboron.spwlyricsisland
+package io.github.solitaire.spwlyricsisland
 
 import com.xuncorp.spw.workshop.api.PlaybackExtensionPoint
 
