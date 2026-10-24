@@ -66,6 +66,7 @@ class LyricsPrefetcher(
         }
         val next = runCatching { nextTrack(current) }.getOrNull() ?: return false
         if (next.key == current.key || next.path.isBlank()) return false
+        if (InstrumentalLyrics.isInstrumentalTitle(next.title)) return false
         val local = runCatching { localLyrics?.invoke(next) }.getOrNull()
         if (local != null && InstrumentalLyrics.isPlaceholder(local)) {
             return false

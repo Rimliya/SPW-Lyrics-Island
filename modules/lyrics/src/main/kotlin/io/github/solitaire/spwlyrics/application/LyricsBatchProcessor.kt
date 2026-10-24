@@ -30,9 +30,12 @@ internal data class LyricsBatchSnapshot(
 )
 
 internal fun batchSkipReason(
+    title: String,
     local: LyricsDocument?,
     policy: AutomaticReplacementPolicy,
 ): Pair<String, String>? = when {
+    InstrumentalLyrics.isInstrumentalTitle(title) ->
+        "纯音乐" to "歌名标注为纯音乐版本，已跳过在线获取"
     local != null && InstrumentalLyrics.isPlaceholder(local) ->
         "纯音乐" to "本地歌词为纯音乐，已跳过在线获取"
     policy == AutomaticReplacementPolicy.MANUAL_ONLY ->
@@ -165,7 +168,7 @@ internal fun batchSkipReason(
             val query = synchronized(lock) { items[index].query }
             val local = runCatching { localLyrics?.invoke(query) }.getOrNull()
             val policy = runCatching { replacementPolicy() }.getOrDefault(AutomaticReplacementPolicy.ALWAYS)
-            val skip = batchSkipReason(local, policy)
+            val skip = batchSkipReason(query.title, local, policy)
             if (skip != null) {
                 synchronized(lock) {
                     if (generation == expectedGeneration) items[index] = items[index].copy(

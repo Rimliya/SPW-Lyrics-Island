@@ -45,6 +45,20 @@ class LyricsPrefetcherTest {
     }
 
     @Test
+    fun skipsInstrumentalTitleMarkers() {
+        val cache = MemoryCache()
+        var resolved = false
+        val prefetcher = prefetcher(
+            cache,
+            nextTrack = { query("烟火焚 (inst.)") },
+            resolve = { resolved = true; cached() },
+        )
+
+        assertFalse(prefetcher.prefetchNow(current))
+        assertFalse(resolved)
+        assertFalse(cache.hasLyrics(query("烟火焚 (inst.)")))
+    }
+    @Test
     fun skipsExistingCacheAndOverrides() {
         val cache = MemoryCache()
         cache.putLyrics(next, cached())
