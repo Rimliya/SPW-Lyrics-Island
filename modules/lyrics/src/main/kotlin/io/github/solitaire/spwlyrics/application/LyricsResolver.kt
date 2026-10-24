@@ -4,6 +4,7 @@ import io.github.solitaire.spwlyrics.codec.SpwLyricsEncoder
 import io.github.solitaire.spwlyrics.domain.CandidateScore
 import io.github.solitaire.spwlyrics.domain.LyricsCandidate
 import io.github.solitaire.spwlyrics.domain.LyricsDocument
+import io.github.solitaire.spwlyrics.domain.InstrumentalLyrics
 import io.github.solitaire.spwlyrics.domain.LyricsQuality
 import io.github.solitaire.spwlyrics.domain.LyricsSimilarity
 import io.github.solitaire.spwlyrics.domain.LyricsSource
@@ -75,6 +76,7 @@ class LyricsResolver(
         onProgress: (LyricsResolutionProgress) -> Unit = {},
         completionDeadlineNanos: Long = Long.MAX_VALUE,
     ): ResolvedLyrics? {
+        if (InstrumentalLyrics.isInstrumentalTitle(query.title)) return null
         val order = preferences()
         val selected = order.sources.filter { it != LyricsSource.LOCAL && it.hasLyrics }
             .mapNotNull(providers::get)

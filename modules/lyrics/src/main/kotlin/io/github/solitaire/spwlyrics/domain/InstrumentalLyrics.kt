@@ -18,8 +18,18 @@ object InstrumentalLyrics {
         RegexOption.IGNORE_CASE,
     )
     private val metadataLine = Regex("^\\[[A-Za-z][\\w-]*:.*]$")
+    private val INSTRUMENTAL_TITLES = setOf("inst", "inst.", "instrumental", "instrumental version", "off vocal", "karaoke", "伴奏", "纯音乐")
+    private val INSTRUMENTAL_TITLE_MARKER = Regex(
+        """(?i)(?:[\(（\[\【]\s*(?:inst\.?|instrumental(?:\s+version)?|off[\s-]*vocal|karaoke|伴奏|纯音乐)\s*[\)\）\]\】]|(?:^|[\s\-–—])(?:inst\.?|off[\s-]*vocal|伴奏|纯音乐)(?:$|[\s\-–—]))""",
+    )
     private val markers = Regex("\\[[^\\]]*]|<[^>]*>")
 
+    /** Detects explicit title markers such as `Song (inst.)`, `[Instrumental]` or `- Off Vocal`. */
+    fun isInstrumentalTitle(title: String): Boolean {
+        val text = title.trim().lowercase()
+        if (text.isEmpty()) return false
+        return text in INSTRUMENTAL_TITLES || INSTRUMENTAL_TITLE_MARKER.containsMatchIn(text)
+    }
     fun isPlaceholder(document: LyricsDocument?): Boolean {
         if (document == null) return false
         val values = document.lines.asSequence()
