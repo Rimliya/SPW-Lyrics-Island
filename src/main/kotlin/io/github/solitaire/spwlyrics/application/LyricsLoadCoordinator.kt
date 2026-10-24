@@ -63,6 +63,7 @@ class LyricsLoadCoordinator(
     ): String? {
         current.set(query)
         val override = cache.getOverride(query)
+        if (override == null && InstrumentalLyrics.isInstrumentalTitle(query.title)) return null
         var local: LyricsDocument? = null
         if (phase == LyricsLoadPhase.BEFORE_LOCAL) {
             local = if (override?.candidate == null) localTtml?.invoke() else null

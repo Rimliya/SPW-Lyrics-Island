@@ -6,6 +6,16 @@ import kotlin.test.assertTrue
 
 class InstrumentalLyricsTest {
     @Test
+    fun recognizesInstrumentalTitleMarkers() {
+        assertTrue(InstrumentalLyrics.isInstrumentalTitle("烟火焚 (inst.)"))
+        assertTrue(InstrumentalLyrics.isInstrumentalTitle("Song（Instrumental）"))
+        assertTrue(InstrumentalLyrics.isInstrumentalTitle("Song [Off Vocal]"))
+        assertTrue(InstrumentalLyrics.isInstrumentalTitle("Song - 伴奏"))
+        assertTrue(InstrumentalLyrics.isInstrumentalTitle("Instrumental"))
+        assertFalse(InstrumentalLyrics.isInstrumentalTitle("烟火焚"))
+        assertFalse(InstrumentalLyrics.isInstrumentalTitle("Instrumental Band"))
+    }
+    @Test
     fun recognizesDocumentPlaceholders() {
         assertTrue(InstrumentalLyrics.isPlaceholder(document("纯音乐，请欣赏")))
         assertTrue(InstrumentalLyrics.isPlaceholder(document("纯音乐，请欣赏。", "Instrumental")))
