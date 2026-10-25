@@ -52,7 +52,7 @@ Lyrics 模块只暴露通用的工作台页面注册点，Tag Workbench 的实�
 | --- | --- | --- | --- |
 | `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.3.0-GPU` + upstream `1.2.1` | `653d2e2` |
 | `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `3.1.0-f.1` + Combined 页面注册 | `3a84c97` |
-| `modules/tag-workbench` | [Rimliya/SPW-Tag-Workbench](https://github.com/Rimliya/SPW-Tag-Workbench) | `embedded-workbench`（上游 1.3.3） | `d84be71` |
+| `modules/tag-workbench` | [Rimliya/SPW-Tag-Workbench](https://github.com/Rimliya/SPW-Tag-Workbench) | `embedded-workbench`（上游 1.3.3） | `c5cccbc` |
 | `modules/media-runtime` | [GaBoron/SPW-Media-Runtime](https://github.com/GaBoron/SPW-Media-Runtime) | `0.2.0` | `ad63eed` |
 
 原始项目：[GaBoron/SPW-island](https://github.com/GaBoron/SPW-island)、[GaBoron/SPW-Lyrics](https://github.com/GaBoron/SPW-Lyrics)、[univers629/SPW-Tag-Workbench](https://github.com/univers629/SPW-Tag-Workbench)、[GaBoron/SPW-Media-Runtime](https://github.com/GaBoron/SPW-Media-Runtime)。
