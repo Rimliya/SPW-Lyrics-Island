@@ -2,6 +2,7 @@ package io.github.solitaire.spwlyricsisland
 
 import com.xuncorp.spw.workshop.api.PluginContext
 import dev.gaboron.spwmedia.host.MediaRuntimePlugin
+import io.github.univers629.spwtagworkbench.EmbeddedWorkbenchRuntime
 import io.github.solitaire.spwlyrics.integration.PluginRuntime
 import io.github.solitaire.spwlyrics.storage.DataDirectory
 import io.github.solitaire.spwisland.host.IslandPlugin
@@ -35,6 +36,16 @@ class SPWLyricsIslandPlugin(context: PluginContext) : IslandPlugin(context) {
                 embeddedPluginId = pluginContext.pluginId,
                 embeddedStorage = DataDirectory.root.resolve("media-runtime"),
             ).also { it.start() }
+            runCatching {
+                EmbeddedWorkbenchRuntime.start(
+                    pluginId = pluginContext.pluginId,
+                    pluginVersion = pluginContext.pluginVersion,
+                    spwVersion = pluginContext.spwVersion,
+                    pluginPath = pluginContext.pluginPath,
+                )
+            }.onFailure {
+                System.getLogger("SPW Lyrics Island").log(System.Logger.Level.WARNING, "内置标签工作台启动失败", it)
+            }
             PluginRuntime.install(pluginContext.pluginId, pluginContext.spwChannel)
         } catch (error: Throwable) {
             runCatching { PluginRuntime.close() }
@@ -49,6 +60,7 @@ class SPWLyricsIslandPlugin(context: PluginContext) : IslandPlugin(context) {
         try {
             PluginRuntime.close()
         } finally {
+            runCatching { EmbeddedWorkbenchRuntime.stop() }
             runCatching { mediaRuntime?.stop() }
             mediaRuntime = null
             super.stop()

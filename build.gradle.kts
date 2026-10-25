@@ -20,6 +20,8 @@ kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_25)
         freeCompilerArgs.add("-jvm-default=no-compatibility")
+        optIn.add("com.xuncorp.spw.workshop.api.UnstableSpwWorkshopApi")
+        optIn.add("androidx.compose.ui.ExperimentalComposeUiApi")
     }
     sourceSets {
         main {
@@ -28,6 +30,12 @@ kotlin {
                 "modules/combined/src/main/kotlin",
                 "modules/island/src/main/kotlin",
                 "modules/lyrics/src/main/kotlin",
+                "modules/tag-workbench/src/main/kotlin",
+            )
+            kotlin.exclude(
+                "**/spwtagworkbench/MainPlugin.kt",
+                "**/spwtagworkbench/ui/HostPassthrough.kt",
+                "**/spwtagworkbench/extension/PlaybackExt.kt",
             )
         }
         test {
@@ -86,6 +94,7 @@ dependencies {
     implementation("net.jthink:jaudiotagger:3.0.1")
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation("io.github.gaboron.spwmedia:spw-media-spw-adapter:0.2.0")
     implementation("io.github.gaboron.spwmedia:spw-media-sdk:0.2.0")
     implementation("com.github.houbb:opencc4j:1.14.0")
@@ -121,6 +130,7 @@ configurations.runtimeClasspath {
 val preferenceSources = listOf(
     layout.projectDirectory.file("modules/island/src/main/resources/preference_config.json"),
     layout.projectDirectory.file("modules/lyrics/src/main/resources/preference_config.json"),
+    layout.projectDirectory.file("modules/tag-workbench/src/main/resources/preference_config.json"),
 )
 val mergedPreferenceConfig = layout.buildDirectory.file("generated/resources/preference_config.json")
 val mergePreferences = tasks.register("mergePreferences") {
@@ -154,6 +164,11 @@ tasks.processResources {
     from(mediaRuntimeExtracted.map { it.file("NOTICE") }) { into("licenses/media-runtime"); rename { "NOTICE" } }
     from("modules/island/native/shared-fonts/MiSansVF.ttf") { into("fonts") }
     from("modules/island/native/shared-fonts/PingFang.ttc") { into("fonts") }
+    from("modules/tag-workbench/src/main/resources/i18n") { into("i18n") }
+    from("modules/tag-workbench/src/main/resources/native") { into("native") }
+    from("modules/tag-workbench/src/main/resources/META-INF/LICENSE") {
+        into("licenses/tag-workbench"); rename { "LICENSE" }
+    }
     dependsOn("buildSpectrum", "buildWindowsTray", "buildWindowsGlass", "buildSpout")
     from(layout.buildDirectory.file("native/spw-spectrum.exe")) { into("native") }
     from(layout.buildDirectory.file("native/spw-island-tray.exe")) { into("native") }
@@ -269,11 +284,12 @@ spmod {
     PluginName = "SPW Lyrics Island"
     PluginVersion = project.version.toString()
     PluginProvider = "solitaire + 大肥鱼（感谢原作者 GaBoron）"
-    PluginDescription = "Lyrics island, multi-source lyrics fetching and embedded SPW Media Runtime for Salt Player for Windows; Windows x64 with OBS Spout2 output."
+    PluginDescription = "Lyrics island, multi-source lyrics, music tag workbench and embedded SPW Media Runtime for Salt Player for Windows; Windows x64 with OBS Spout2 output."
     PluginHasConfig = true
     PluginOpenSourceUrl = projectUrl.get()
     PluginPermissions = listOf(
         com.xuncorp.spw.workshop.gradle.PluginPermission.LIBRARY_READ,
+        com.xuncorp.spw.workshop.gradle.PluginPermission.LIBRARY_WRITE,
         com.xuncorp.spw.workshop.gradle.PluginPermission.KEY_BINDINGS,
         com.xuncorp.spw.workshop.gradle.PluginPermission.CLASS_TRANSFORM,
     )
@@ -294,6 +310,10 @@ tasks.register<Zip>("sourceArchive") {
     }
     from("modules/media-runtime") {
         into("modules/media-runtime")
+        exclude("**/build/**", "**/.gradle/**", "**/.kotlin/**", "**/__pycache__/**", "**/*.pyc")
+    }
+    from("modules/tag-workbench") {
+        into("modules/tag-workbench")
         exclude("**/build/**", "**/.gradle/**", "**/.kotlin/**", "**/__pycache__/**", "**/*.pyc")
     }
     from("gradle") { into("gradle") }
