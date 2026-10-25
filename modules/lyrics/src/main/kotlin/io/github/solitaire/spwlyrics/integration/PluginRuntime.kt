@@ -8,9 +8,8 @@ import io.github.solitaire.spwlyrics.application.AutomaticReplacementPolicy
 import io.github.solitaire.spwlyrics.application.LyricsLoadPhase
 import io.github.solitaire.spwlyrics.application.LyricsLoadCoordinator
 import io.github.solitaire.spwlyrics.application.LyricsBatchProcessor
-import io.github.solitaire.spwlyrics.application.LyricsPerformanceMonitor
-import io.github.solitaire.spwlyrics.application.LyricsPrefetcher
 import io.github.solitaire.spwlyrics.application.LyricsResolver
+import io.github.solitaire.spwlyrics.application.LyricsPrecache
 import io.github.solitaire.spwlyrics.application.LyricsOutputRouter
 import io.github.solitaire.spwlyrics.domain.LyricsCandidate
 import io.github.solitaire.spwlyrics.domain.LyricsDocument
@@ -38,32 +37,37 @@ import io.github.solitaire.spwlyrics.integration.workspace.LyricsWorkspaceSessio
 import io.github.solitaire.spwlyrics.integration.workspace.LyricsToolPage
 import io.github.solitaire.spwlyrics.integration.hostui.HostUiIntegration
 import io.github.solitaire.spwlyrics.storage.FileLyricsDelaySettings
+import io.github.solitaire.spwlyrics.storage.FileTimingCalibrationStore
 import java.time.Duration
 
 object PluginRuntime {
     @Volatile private var coordinator: LyricsLoadCoordinator? = null
     @Volatile private var batchProcessor: LyricsBatchProcessor? = null
+    @Volatile private var precache: LyricsPrecache? = null
     @Volatile private var workspace: LyricsWorkspace? = null
+    @Volatile private var timingPlayback: SpwTimingPlayback? = null
+    @Volatile private var timingMedia: TimingMediaRuntime? = null
     @Volatile private var hostUi: HostUiIntegration? = null
     @Volatile private var settings: PluginSettings? = null
-    @Volatile private var prefetcher: LyricsPrefetcher? = null
-    @Volatile private var performanceMonitor: LyricsPerformanceMonitor? = null
     @Volatile private var cacheFolderOpener: CacheFolderOpener? = null
     private val libraryTracks = SpwLibraryTrackSource()
-    private val nextTracks = SpwNextTrackSource(libraryTracks)
     private val localTtmlLyrics = LocalTtmlLyricsLoader()
-    private const val PREFETCH_DELAY_MILLIS = 2_000L
 
     @Synchronized
     @OptIn(UnstableSpwWorkshopApi::class)
-    fun install() {
+    fun install(pluginId: String, channel: com.xuncorp.spw.workshop.api.Channel) {
         if (coordinator != null) return
+        timingMedia?.close()
+        timingMedia = null
         val root = DataDirectory.root
         val cacheDirectory = root.resolve("cache")
         val cache = FileLyricsCache(cacheDirectory)
         val delays = FileLyricsDelaySettings(root.resolve("歌词延迟"))
         cacheFolderOpener = CacheFolderOpener(cacheDirectory)
-        settings = PluginSettings(WorkshopApi.manager.createConfigManager(), { coordinator?.selectionChanged() }, ::toastWarning)
+        settings = PluginSettings(WorkshopApi.manager.createConfigManager(), {
+            coordinator?.selectionChanged()
+            coordinator?.currentQuery()?.let { precache?.trackChanged(it, force = true) }
+        }, ::toastWarning)
         val http = ProviderHttpClient()
         val providers = listOf(
             AmllProvider(
@@ -81,8 +85,6 @@ object PluginRuntime {
             LocalLyricsProvider(),
         )
         val resolver = LyricsResolver(providers, preferences = { settings?.lyricsPreferences() ?: io.github.solitaire.spwlyrics.domain.LyricsPreferences() })
-        performanceMonitor = LyricsPerformanceMonitor(root.resolve("lyrics-performance.log"), resolver::searchMetrics)
-            .also { it.start() }
         val refreshBridge = ReflectiveLyricsRefreshBridge()
         val output = LyricsOutputRouter(
             receiver = JmxTtmlReceiver(),
@@ -100,25 +102,16 @@ object PluginRuntime {
             notify = ::toastWarning,
             delays = delays,
             output = output,
+            prepareQuery = libraryTracks::prepare,
             similarityLevel = { settings?.similarityLevel() ?: LyricsSimilarity.Level.STANDARD },
         )
-        prefetcher = LyricsPrefetcher(
-            cache = cache,
-            nextTrack = nextTracks::next,
-            resolve = { query ->
-                val local = localLyrics(query)
-                resolver.resolveAutomaticFully(
-                    query,
-                    reference = local,
-                    similarity = settings?.similarityLevel() ?: LyricsSimilarity.Level.STANDARD,
-                )?.let(resolver::toCache)
+        precache = LyricsPrecache(
+            loadLibrary = libraryTracks::loadForPrecache,
+            prepare = { query ->
+                val local = localTtmlLyrics.load(query.path)
+                coordinator?.precache(query, hasLocalLyrics = local != null, reference = local)
             },
             enabled = { settings?.prefetchNextTrack() == true },
-            policy = { settings?.automaticReplacementPolicy() ?: AutomaticReplacementPolicy.ALWAYS },
-            hasLocalLyrics = { query -> localLyrics(query) != null },
-            localLyrics = ::localLyrics,
-            selectionKey = resolver::selectionKey,
-            delayMillis = PREFETCH_DELAY_MILLIS,
         )
         val batch = LyricsBatchProcessor(
             loadLibrary = libraryTracks::load,
@@ -137,7 +130,8 @@ object PluginRuntime {
             override fun currentAudioPath() = currentQuery()?.path
             override fun chooseAudioFile() = MetadataFilePicker.audio()
             override fun chooseLyricsFile() = MetadataFilePicker.lyrics()
-            override fun openSearch() = openManualSearch()
+            override fun chooseCoverFile() = MetadataFilePicker.cover()
+            override fun openSearch(query: TrackQuery) { workspace?.searchMetadata(query) }
             override fun afterSave(path: java.nio.file.Path) {
                 val currentPath = WorkshopApi.playback.getCurrentMediaItem()?.path
                 if (currentPath != null && runCatching { java.nio.file.Path.of(currentPath).toRealPath() == path }.getOrDefault(false)) {
@@ -158,11 +152,15 @@ object PluginRuntime {
             override fun setDelay(query: TrackQuery, delayMs: Int) =
                 isCurrentTrack(query) && coordinator?.setDelay(query, delayMs) == true
             override fun metadata(candidate: LyricsCandidate) = resolver.metadata(candidate)
-            override fun editMetadata(query: TrackQuery, candidate: LyricsCandidate, document: LyricsDocument?) {
-                workspace?.importSearch(query, candidate, document)
+            override fun editMetadata(query: TrackQuery, candidate: LyricsCandidate, document: LyricsDocument?, preserveDraft: Boolean) {
+                workspace?.importSearch(query, candidate, document, preserveDraft)
             }
         }
-        workspace = LyricsWorkspace({ LyricsWorkspaceSession(manualOperations, metadataOperations, batch, describeBatchFailure) }, ::toastWarning)
+        val timingTransport = SpwTimingPlayback().also { timingPlayback = it }
+        val timingRuntime = TimingMediaRuntime(pluginId).also { timingMedia = it }
+        val calibration = FileTimingCalibrationStore(root.resolve("打轴输入校准.properties"))
+        workspace = LyricsWorkspace({ LyricsWorkspaceSession(manualOperations, metadataOperations, batch, describeBatchFailure,
+            timingTransport, calibration, SpwTimingAudioDecoder(timingRuntime, TimingRuntimeInstall(channel))) }, ::toastWarning)
         hostUi = HostUiIntegration(checkNotNull(workspace), ::toastWarning).also { it.start() }
     }
 
@@ -193,33 +191,12 @@ object PluginRuntime {
         workspace?.open(LyricsToolPage.METADATA)
     }
     fun openWorkspace() = workspace?.open(LyricsToolPage.BATCH)
+    fun timingSeeked() { timingPlayback?.seeked() }
     fun openCacheFolder() {
         if (cacheFolderOpener?.open() != true) toastWarning("无法打开 SPW Lyrics 本地缓存文件夹。")
     }
     fun resetLyricsOrder() {
         toastWarning(if (settings?.resetSelection() == true) "已恢复默认歌词排序。关闭并重新打开设置可查看默认顺序。" else "重置未完成，请重新打开设置后重试。")
-    }
-
-    fun canDisableCurrentLyrics(): Boolean {
-        val active = coordinator ?: return false
-        val query = currentQuery() ?: return false
-        return runCatching { active.canDisableCurrentLyrics(query) }.getOrDefault(false)
-    }
-
-    fun disableCurrentLyrics(): Boolean {
-        val active = coordinator ?: return false
-        val query = currentQuery() ?: return false
-        Thread({
-            val disabled = runCatching { active.disableCurrentLyrics(query) }.getOrDefault(false)
-            runCatching {
-                WorkshopApi.ui.toast(
-                    if (disabled) "已禁用本曲自动歌词；可在插件设置中打开手动搜索选择正确歌词。"
-                    else "未禁用：当前歌词已切换或不可用。",
-                    if (disabled) WorkshopApi.Ui.ToastType.Warning else WorkshopApi.Ui.ToastType.Error,
-                )
-            }
-        }, "spw-lyrics-disable-current").apply { isDaemon = true }.start()
-        return true
     }
 
     @Synchronized
@@ -228,18 +205,20 @@ object PluginRuntime {
         hostUi = null
         workspace?.close()
         workspace = null
+        val mediaCleanup = runCatching { timingMedia?.close() }
+        if (mediaCleanup.isSuccess) timingMedia = null
+        timingPlayback = null
         cacheFolderOpener = null
-        prefetcher?.close()
-        prefetcher = null
-        performanceMonitor?.close()
-        performanceMonitor = null
         settings?.close()
         settings = null
         batchProcessor?.close()
         batchProcessor = null
+        precache?.close()
+        precache = null
         coordinator?.close()
         coordinator = null
         libraryTracks.clear()
+        mediaCleanup.getOrThrow()
     }
 
     private fun load(
@@ -248,19 +227,20 @@ object PluginRuntime {
         localTtml: (() -> LyricsDocument?)? = null,
     ): String? {
         val query = libraryTracks.fromLyricsCallback(mediaItem)
-        prefetcher?.onTrackLoaded(query)
-        return coordinator?.onLoad(
+        val result = coordinator?.onLoad(
             query,
             phase,
             settings?.automaticReplacementPolicy() ?: AutomaticReplacementPolicy.ALWAYS,
             localTtml,
         )
+        precache?.trackChanged(query)
+        return result
     }
+
+    private fun isCurrentTrack(query: TrackQuery): Boolean = currentQuery()?.key == query.key
 
     private fun localLyrics(query: TrackQuery): LyricsDocument? =
         query.path.takeIf(String::isNotBlank)?.let(localTtmlLyrics::load)
-
-    private fun isCurrentTrack(query: TrackQuery): Boolean = currentQuery()?.key == query.key
 
     private fun toastWarning(message: String) {
         runCatching { WorkshopApi.ui.toast(message, WorkshopApi.Ui.ToastType.Warning) }

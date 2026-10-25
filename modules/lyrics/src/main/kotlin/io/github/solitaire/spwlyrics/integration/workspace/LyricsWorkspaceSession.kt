@@ -9,7 +9,12 @@ import io.github.solitaire.spwlyrics.integration.manualui.ManualSearchController
 import io.github.solitaire.spwlyrics.integration.manualui.ManualSearchOperations
 import io.github.solitaire.spwlyrics.integration.metadataui.MetadataEditorController
 import io.github.solitaire.spwlyrics.integration.metadataui.MetadataEditorOperations
+import io.github.solitaire.spwlyrics.integration.metadataui.MetadataLyricsView
 import io.github.solitaire.spwlyrics.storage.FileAudioMetadataStore
+import io.github.solitaire.spwlyrics.application.TimingPlayback
+import io.github.solitaire.spwlyrics.application.TimingAudioDecoder
+import io.github.solitaire.spwlyrics.storage.TimingCalibrationStore
+import io.github.solitaire.spwlyrics.integration.timingui.LyricsTimingController
 
 internal enum class LyricsToolPage(val title: String) {
     SEARCH("手动搜索"), METADATA("元数据编辑"), BATCH("批量处理")
@@ -21,18 +26,24 @@ internal class LyricsWorkspaceSession(
     metadataOperations: MetadataEditorOperations,
     processor: LyricsBatchProcessor,
     describeFailure: (Throwable) -> String,
+    timingPlayback: TimingPlayback,
+    calibrationStore: TimingCalibrationStore,
+    timingAudio: TimingAudioDecoder,
 ) : AutoCloseable {
     val manual = ManualSearchController(manualOperations)
     val metadata = MetadataEditorController(FileAudioMetadataStore(), metadataOperations)
+    val timing = LyricsTimingController(metadata, timingPlayback, calibrationStore, timingAudio)
     val batch = BatchProcessingController(processor, describeFailure)
     var page by mutableStateOf(LyricsToolPage.SEARCH)
         private set
+    var lyricsView by mutableStateOf(MetadataLyricsView.STRUCTURED)
+    val timingFocused get() = page == LyricsToolPage.METADATA && lyricsView == MetadataLyricsView.TIMING
 
     private val initialized = mutableSetOf<LyricsToolPage>()
 
     fun select(value: LyricsToolPage, initialize: Boolean = true) {
         page = value
-        if (!initialize || !initialized.add(value)) return
+        if (!initialized.add(value) || !initialize) return
         when (value) {
             LyricsToolPage.SEARCH -> manual.refreshTrack()
             LyricsToolPage.BATCH -> batch.load()
@@ -41,5 +52,5 @@ internal class LyricsWorkspaceSession(
     }
 
     fun requestClose(close: () -> Unit) = metadata.requestDiscard(close)
-    override fun close() { manual.close(); metadata.close(); batch.close() }
+    override fun close() { timing.close(); manual.close(); metadata.close(); batch.close() }
 }

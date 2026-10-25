@@ -9,6 +9,10 @@ import io.github.solitaire.spwlyrics.codec.MetadataLyricsFormat
 import io.github.solitaire.spwlyrics.codec.TtmlEditCodec
 import io.github.solitaire.spwlyrics.codec.TtmlLyricRows
 import io.github.solitaire.spwlyrics.codec.LyricEditTime
+import io.github.solitaire.spwlyrics.codec.AudioArtworkImages
+import io.github.solitaire.spwlyrics.application.OnlineArtworkImport
+import io.github.solitaire.spwlyrics.codec.TimingWordPreparation
+import io.github.solitaire.spwlyrics.domain.TimingSplit
 import io.github.solitaire.spwlyrics.domain.EditableLyricLine
 import io.github.solitaire.spwlyrics.domain.EditableLyrics
 import io.github.solitaire.spwlyrics.domain.LyricsDocument
@@ -26,14 +30,16 @@ internal interface MetadataEditorOperations {
     fun currentAudioPath(): String?
     fun chooseAudioFile(): Path?
     fun chooseLyricsFile(): Path?
+    fun chooseCoverFile(): Path?
     fun afterSave(path: Path)
-    fun openSearch()
+    fun openSearch(query: TrackQuery)
 }
 
 /** All state transitions occur on the event thread; file IO and parsing run on dedicated workers. */
 internal class MetadataEditorController(
     private val store: AudioMetadataStore,
     private val operations: MetadataEditorOperations,
+    private val artworkImport: OnlineArtworkImport = OnlineArtworkImport(),
 ) : AutoCloseable {
     var state by mutableStateOf(MetadataEditorState())
         private set
@@ -89,6 +95,32 @@ internal class MetadataEditorController(
         if (ids.isEmpty()) return
         val changes = runCatching { ids.associateWith { change(state.line(it) ?: error("歌词行已失效。")) } }
         val updated = changes.getOrElse { state = state.copy(previewError = it.message); return }
+        stageLineEdits(updated)
+    }
+
+    fun applyTimingLines(expectedRaw: String, updated: Map<Int, EditableLyricLine>): Boolean {
+        val base = state.structured ?: return false
+        if (closed || state.busy || state.loaded == null || base.raw != expectedRaw) return false
+        if (updated.any { (id, line) -> base.lines.firstOrNull { it.id == id }?.path != line.path }) return false
+        stageLineEdits(updated)
+        return true
+    }
+
+    fun prepareTimingWords(mode: TimingSplit) {
+        val base = state.structured ?: return
+        if (closed || state.busy || state.validating || state.loaded == null) return
+        val edits = state.lineEdits
+        run({ TimingWordPreparation.prepare(TtmlEditCodec.openRaw(TtmlEditCodec.apply(base, edits)), mode) }, { result ->
+            if (result.prepared > 0) {
+                lyrics(result.raw)
+                state = state.copy(structured = TtmlEditCodec.openRaw(result.raw))
+            }
+            state = state.copy(status = "已为 ${result.prepared} 行准备逐字内容；${result.skipped} 行含扩展标记，保留原样。已有逐字内容未重新分词。")
+        })
+    }
+
+    private fun stageLineEdits(updated: Map<Int, EditableLyricLine>) {
+        val base = state.structured ?: return
         val edits = (state.lineEdits + updated).filter { (id, line) -> line != base.lines.first { it.id == id } }
         previewTask?.cancel(false)
         val generation = ++previewGeneration
@@ -176,15 +208,30 @@ internal class MetadataEditorController(
         })
     }
 
-    fun importSearch(query: TrackQuery, candidate: io.github.solitaire.spwlyrics.domain.LyricsCandidate, document: LyricsDocument?) = requestDiscard {
+    fun importSearch(query: TrackQuery, candidate: io.github.solitaire.spwlyrics.domain.LyricsCandidate, document: LyricsDocument?, preserveDraft: Boolean = false) {
+        if (closed || state.busy) return
+        val sameFile = state.loaded?.path?.let { path ->
+            runCatching { java.nio.file.Files.isSameFile(path, Path.of(query.path)) }.getOrDefault(false)
+        } == true
+        if (preserveDraft && sameFile) {
+            val format = state.format
+            run({ prepareOnlineImport(candidate, document, format) }, { pending ->
+                state = state.copy(onlineImport = pending, status = "已读取在线信息、封面与可用歌词，原草稿已保留。请勾选并应用。")
+            })
+        } else requestDiscard { loadSearch(query, candidate, document) }
+    }
+
+    private fun loadSearch(query: TrackQuery, candidate: io.github.solitaire.spwlyrics.domain.LyricsCandidate, document: LyricsDocument?) {
         val format = state.format
-        run({ store.read(Path.of(query.path)) to document?.let { MetadataLyricsExport.encode(it, format) } }, { (snapshot, text) ->
+        run({ store.read(Path.of(query.path)) to prepareOnlineImport(candidate, document, format) }, { (snapshot, pending) ->
             loaded(snapshot)
-            if (text != null) lyrics(text)
-            state = state.copy(format = format, sourceDocument = document, onlineImport = io.github.solitaire.spwlyrics.domain.OnlineMetadataImport.from(candidate),
-                status = "已读取在线信息。请在左侧勾选字段并应用到草稿；核对后点击“写入歌曲文件”。")
+            state = state.copy(format = format, onlineImport = pending,
+                status = "已读取在线信息。请勾选字段、封面或歌词并应用到草稿；核对后写入歌曲文件。")
         })
     }
+
+    private fun prepareOnlineImport(candidate: io.github.solitaire.spwlyrics.domain.LyricsCandidate, document: LyricsDocument?, format: MetadataLyricsFormat) =
+        artworkImport.prepare(candidate).copy(lyricsText = document?.let { MetadataLyricsExport.encode(it, format) }, lyricsDocument = document)
 
     fun selectImport(field: AudioMetadataField, selected: Boolean) {
         val pending = state.onlineImport ?: return
@@ -195,15 +242,57 @@ internal class MetadataEditorController(
         if (!state.busy) state = state.copy(onlineImport = state.onlineImport?.copy(fillMissing = fillMissing))
     }
 
+    fun selectCoverImport() {
+        val pending = state.onlineImport ?: return
+        if (!closed && !state.busy) state = state.copy(onlineImport = pending.copy(coverSelected = !pending.coverSelected))
+    }
+
+    fun selectLyricsImport() {
+        val pending = state.onlineImport ?: return
+        if (!closed && !state.busy) state = state.copy(onlineImport = pending.copy(lyricsSelected = !pending.lyricsSelected))
+    }
+
+    fun retryCoverImport() {
+        val pending = state.onlineImport ?: return
+        run({ artworkImport.retry(pending) }, { state = state.copy(onlineImport = it, status = "在线封面已重新读取，请核对后应用。") })
+    }
+
+    fun importCover() {
+        if (closed || state.busy || state.loaded == null) return
+        val path = operations.chooseCoverFile() ?: return
+        run({ AudioArtworkImages.read(path) }, { image ->
+            state = state.copy(draft = state.draft.withCover(image), status = "封面已替换到草稿。点击“写入歌曲文件”保存。")
+        })
+    }
+
+    fun removeCover() {
+        if (!closed && !state.busy && state.loaded != null) state = state.copy(draft = state.draft.copy(artwork = emptyList()),
+            error = false, status = "草稿中的全部内嵌图片已移除。点击“写入歌曲文件”保存。")
+    }
+
+    fun restoreCover() {
+        val original = state.loaded ?: return
+        if (!closed && !state.busy) state = state.copy(draft = state.draft.copy(artwork = original.metadata.artwork),
+            error = false, status = "已恢复本次读取时的封面，其他草稿保留。")
+    }
+
     fun applyImport() {
         val pending = state.onlineImport ?: return
         if (state.busy || state.loaded == null) return
-        state = state.copy(draft = pending.apply(state.draft), error = false,
-            status = "所选字段已应用到草稿。请核对后点击“写入歌曲文件”。")
+        val updated = pending.apply(state.draft)
+        val replacingLyrics = pending.lyricsSelected && pending.lyricsText != null && (!pending.fillMissing || state.draft.lyrics.isBlank())
+        if (replacingLyrics) lyrics(updated.lyrics)
+        state = state.copy(draft = updated, sourceDocument = if (replacingLyrics) pending.lyricsDocument else state.sourceDocument, error = false,
+            status = "所选字段、封面和歌词已按导入模式应用到草稿。请核对后写入歌曲文件。")
     }
 
     fun openSearch() {
-        if (!closed && !state.busy) operations.openSearch()
+        val loaded = state.loaded ?: return
+        if (!closed && !state.busy) operations.openSearch(TrackQuery(
+            title = state.draft[AudioMetadataField.TITLE].ifBlank { loaded.path.fileName.toString().substringBeforeLast('.') },
+            artists = state.draft[AudioMetadataField.ARTIST].lineSequence().filter(String::isNotBlank).toList(),
+            album = state.draft[AudioMetadataField.ALBUM], path = loaded.path.toString(),
+        ))
     }
 
     fun importLyrics() {
@@ -220,7 +309,7 @@ internal class MetadataEditorController(
         val original = state.loaded ?: return
         val edited = state.draft
         run({
-            if (edited.lyrics != original.metadata.lyrics) MetadataLyricsImport.preview(edited.lyrics)
+            if (edited.lyrics.isNotBlank() && edited.lyrics != original.metadata.lyrics) MetadataLyricsImport.preview(edited.lyrics)
             store.save(original, edited)
         }, { saved ->
             loaded(saved.snapshot)

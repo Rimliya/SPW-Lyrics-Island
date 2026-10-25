@@ -10,10 +10,10 @@ import io.github.solitaire.spwlyrics.storage.LyricsCache
 import io.github.solitaire.spwlyrics.storage.ManualOverride
 import io.github.solitaire.spwlyrics.storage.LyricsDelaySettings
 import io.github.solitaire.spwlyrics.codec.SpwLyricsEncoder
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
@@ -31,16 +31,16 @@ class LyricsLoadCoordinator(
     },
     private val delays: LyricsDelaySettings? = null,
     private val output: LyricsOutputRouter? = null,
+    private val prepareQuery: (TrackQuery) -> TrackQuery = { it },
     private val similarityLevel: () -> LyricsSimilarity.Level = { LyricsSimilarity.Level.STANDARD },
 ) : AutoCloseable {
     private val refreshRetrier = LyricsRefreshRetrier(refreshBridge, notify)
     private val current = AtomicReference<TrackQuery?>()
     private val localLyrics = AtomicReference<Pair<String, LyricsDocument>?>()
-    private val inFlight = ConcurrentHashMap<String, CompletableFuture<*>>()
-    private val activeAutomaticLoads = ConcurrentHashMap<String, Any>()
-    private val qualityUpgradeInFlight = ConcurrentHashMap<String, CompletableFuture<*>>()
+    private val tasks = LyricsResolutionTasks(executor)
     private val qualityUpgradeAttempts = BackgroundAttemptGate(QUALITY_UPGRADE_RETRY_SECONDS)
     private val notifiedFailures = ConcurrentHashMap.newKeySet<String>()
+    private val selectionLock = Any()
     private val renderCacheLock = Any()
     private var renderedDocument: LyricsDocument? = null
     private var renderedDelay = Int.MIN_VALUE
@@ -49,10 +49,11 @@ class LyricsLoadCoordinator(
     fun currentQuery(): TrackQuery? = current.get()
 
     fun selectionChanged() {
-        inFlight.values.forEach { it.cancel(true) }; inFlight.clear()
-        qualityUpgradeInFlight.values.forEach { it.cancel(true) }; qualityUpgradeInFlight.clear()
-        activeAutomaticLoads.clear()
-        current.get()?.takeUnless(::automaticWasSuperseded)?.let(::refreshOrNotify)
+        synchronized(selectionLock) { tasks.cancelAll() }
+        current.get()?.takeUnless(::automaticWasSuperseded)?.let { query ->
+            output?.withdraw(query)
+            refreshOrNotify(query)
+        }
     }
 
     fun onLoad(
@@ -61,7 +62,9 @@ class LyricsLoadCoordinator(
         replacementPolicy: AutomaticReplacementPolicy,
         localTtml: (() -> LyricsDocument?)? = null,
     ): String? {
-        current.set(query)
+        if (current.getAndSet(query)?.key != query.key) {
+            tasks.cancelExcept(query.key, upgradeKey(query))
+        }
         val override = cache.getOverride(query)
         if (override == null && InstrumentalLyrics.isInstrumentalTitle(query.title)) return null
         var local: LyricsDocument? = null
@@ -83,24 +86,23 @@ class LyricsLoadCoordinator(
             if (InstrumentalLyrics.isPlaceholder(cached.document)) {
                 return render(query, cached.document, cached.encoded)
             }
-            if (override?.candidate == null && !activeAutomaticLoads.contains(query.key)) {
+            if (override?.candidate == null && !tasks.contains(query.key)) {
                 startQualityUpgradeIfNeeded(query, resolvedFromCache(query, cached))
             }
             return render(query, cached.document, cached.encoded)
         }
-        inFlight.computeIfAbsent(query.key) {
-            val automaticToken = Any()
-            if (override?.candidate == null) activeAutomaticLoads[query.key] = automaticToken
-            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(INITIAL_RESOLUTION_SECONDS)
-            val future = CompletableFuture.runAsync({ resolveAndRefresh(query, override?.candidate, deadline) }, executor)
-            future.whenComplete { _, error ->
-                if (error != null && !future.isCancelled && override?.candidate == null && local == null) recordAutomaticFailure(query)
-                activeAutomaticLoads.remove(query.key, automaticToken)
-                inFlight.remove(query.key, future)
-            }
-            future
-        }
+        startLoad(query, override?.candidate)
         return local?.let { render(query, it) }
+    }
+
+    /** Warms disk entries and shares an unfinished speculative search with later playback. */
+    fun precache(query: TrackQuery, hasLocalLyrics: Boolean = false, reference: LyricsDocument? = null): Future<*>? {
+        val override = cache.getOverride(query)
+        if (override?.local == true) return null
+        if (override?.candidate == null && hasLocalLyrics) return null
+        if (override == null && InstrumentalLyrics.isInstrumentalTitle(query.title)) return null
+        if (cache.getLyrics(query)?.let { override?.candidate != null || it.selectionKey == resolver.selectionKey() } == true) return null
+        return startLoad(query, override?.candidate, background = true, reference = reference ?: localReference(query))
     }
 
     fun searchManual(query: TrackQuery, keywords: String, source: io.github.solitaire.spwlyrics.domain.LyricsSource?,
@@ -111,59 +113,48 @@ class LyricsLoadCoordinator(
 
     fun applyManual(query: TrackQuery, candidate: LyricsCandidate): Boolean {
         if (current.get()?.key != query.key) return false
-        qualityUpgradeInFlight.remove(query.key)?.cancel(true)
+        tasks.cancel(upgradeKey(query))
         val resolved = resolver.fetchManual(candidate) ?: return false
-        if (current.get()?.key != query.key) return false
-        cache.putOverride(query, ManualOverride(local = false, source = candidate.source, candidate = candidate))
-        inFlight.remove(query.key)?.cancel(true)
-        cache.putLyrics(query, resolver.toCache(resolved))
-        offer(query, resolved.document)
-        notifiedFailures.remove(query.key)
-        refreshOrNotify(query)
+        val cached = resolver.toCache(resolved)
+        synchronized(selectionLock) {
+            if (current.get()?.key != query.key) return false
+            tasks.cancel(query.key)
+            tasks.cancel(upgradeKey(query))
+            cache.putOverride(query, ManualOverride(local = false, source = candidate.source, candidate = candidate))
+            cache.putLyrics(query, cached)
+            offer(query, resolved.document)
+            notifiedFailures.remove(query.key)
+            refreshOrNotify(query)
+        }
         return true
     }
 
     fun useLocal(query: TrackQuery): Boolean {
         if (current.get()?.key != query.key) return false
-        cache.putOverride(query, ManualOverride(local = true))
-        inFlight.remove(query.key)?.cancel(true)
-        qualityUpgradeInFlight.remove(query.key)?.cancel(true)
-        notifiedFailures.remove(query.key)
-        output?.withdraw(query)
-        refreshOrNotify(query)
+        synchronized(selectionLock) {
+            if (current.get()?.key != query.key) return false
+            tasks.cancel(query.key)
+            tasks.cancel(upgradeKey(query))
+            cache.putOverride(query, ManualOverride(local = true))
+            notifiedFailures.remove(query.key)
+            output?.withdraw(query)
+            refreshOrNotify(query)
+        }
         return true
     }
 
-    /** True when the current track is showing an automatically fetched karaoke document. */
-    fun canDisableCurrentLyrics(query: TrackQuery): Boolean {
-        if (current.get()?.key != query.key) return false
-        val override = cache.getOverride(query)
-        if (override?.local == true || override?.candidate != null) return false
-        val cached = cache.getLyrics(query) ?: return false
-        return cached.document.lines.any { it.words.isNotEmpty() }
-    }
-
-    /** Blocks automatic lyrics for this track and falls back to its local lyrics. */
-    fun disableCurrentLyrics(query: TrackQuery): Boolean = useLocal(query)
-
     fun useAutomatic(query: TrackQuery): Boolean {
         if (current.get()?.key != query.key) return false
-        inFlight.remove(query.key)?.cancel(true)
-        qualityUpgradeInFlight.remove(query.key)?.cancel(true)
-        qualityUpgradeAttempts.clear(query.key)
-        cache.removeOverride(query)
-        cache.removeLyrics(query)
-        output?.withdraw(query)
-        notifiedFailures.remove(query.key)
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(INITIAL_RESOLUTION_SECONDS)
-        val automaticToken = Any()
-        activeAutomaticLoads[query.key] = automaticToken
-        val future = CompletableFuture.runAsync({ resolveAndRefresh(query, null, deadline) }, executor)
-        inFlight[query.key] = future
-        future.whenComplete { _, error ->
-            if (error != null && !future.isCancelled) recordAutomaticFailure(query)
-            activeAutomaticLoads.remove(query.key, automaticToken)
-            inFlight.remove(query.key, future)
+        synchronized(selectionLock) {
+            if (current.get()?.key != query.key) return false
+            tasks.cancel(query.key)
+            tasks.cancel(upgradeKey(query))
+            qualityUpgradeAttempts.clear(query.key)
+            cache.removeOverride(query)
+            cache.removeLyrics(query)
+            output?.withdraw(query)
+            notifiedFailures.remove(query.key)
+            startLoad(query, null)
         }
         return true
     }
@@ -177,43 +168,58 @@ class LyricsLoadCoordinator(
         return true
     }
 
-    private fun resolveAndRefresh(query: TrackQuery, manual: LyricsCandidate?, deadlineNanos: Long) {
-        if (manual == null) {
-            resolveAutomaticProgressively(query, deadlineNanos)
-            return
+    private fun startLoad(
+        query: TrackQuery,
+        manual: LyricsCandidate?,
+        background: Boolean = false,
+        reference: LyricsDocument? = localReference(query),
+    ): Future<*> =
+        tasks.start(query.key, background) { isActive ->
+            try {
+                if (manual == null) {
+                    val prepared = prepareQuery(query)
+                    if (!isActive()) return@start
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(INITIAL_RESOLUTION_SECONDS)
+                    val final = resolver.resolveAutomaticProgressively(
+                        query = prepared,
+                        snapshotDeadlineNanos = deadline,
+                        reference = reference,
+                        similarity = similarityLevel(),
+                        background = background,
+                    ) { interim ->
+                        applyAutomaticResult(query, interim, isActive)
+                    }
+                    if (isActive()) {
+                        if (final != null) applyAutomaticResult(query, final, isActive)
+                        else recordAutomaticFailure(query)
+                    }
+                } else {
+                    val fetched = resolver.fetchManual(manual) ?: return@start
+                    val cached = resolver.toCache(fetched)
+                    synchronized(selectionLock) {
+                        if (!isActive() || cache.getOverride(query)?.candidate != manual) return@start
+                        cache.putLyrics(query, cached)
+                        notifiedFailures.remove(query.key)
+                        if (current.get()?.key == query.key) {
+                            offer(query, fetched.document)
+                            refreshOrNotify(query)
+                        }
+                    }
+                }
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            } catch (_: Exception) {
+                if (isActive() && manual == null) recordAutomaticFailure(query)
+            }
         }
-        val fetched = resolver.fetchManual(manual)
-        if (fetched == null) {
-            return
-        }
-        cache.putLyrics(query, resolver.toCache(fetched))
-        notifiedFailures.remove(query.key)
-        if (current.get()?.key == query.key) {
-            offer(query, fetched.document)
-            refreshOrNotify(query)
-        }
-    }
 
-    private fun resolveAutomaticProgressively(query: TrackQuery, snapshotDeadlineNanos: Long) {
-        val reference = localReference(query)
-        val final = resolver.resolveAutomaticProgressively(query, snapshotDeadlineNanos, reference, similarityLevel()) { interim ->
-            applyAutomaticResult(query, interim)
-        }
-        if (final == null) {
-            // Local lyrics are already displayed; a rejected online result is not a failure.
-            if (reference == null) recordAutomaticFailure(query)
-            return
-        }
-        if (automaticWasSuperseded(query)) return
-        applyAutomaticResult(query, final)
-    }
-
-    private fun applyAutomaticResult(query: TrackQuery, result: ResolvedLyrics) {
-        if (automaticWasSuperseded(query)) return
-        if (result.selectionKey != resolver.selectionKey()) return
+    private fun applyAutomaticResult(query: TrackQuery, result: ResolvedLyrics, isActive: () -> Boolean) = synchronized(selectionLock) {
+        if (!isActive()) return@synchronized
+        if (automaticWasSuperseded(query)) return@synchronized
+        if (result.selectionKey != resolver.selectionKey()) return@synchronized
         val cached = cache.getLyrics(query)?.takeIf { it.selectionKey == result.selectionKey }
-        if (cached != null && !resolver.canReplace(cached.document, result.document)) return
-        if (cached?.document == result.document) return
+        if (cached != null && !resolver.canReplace(cached.document, result.document)) return@synchronized
+        if (cached?.document == result.document) return@synchronized
         cache.putLyrics(query, resolver.toCache(result))
         notifiedFailures.remove(query.key)
         if (current.get()?.key == query.key) {
@@ -224,26 +230,24 @@ class LyricsLoadCoordinator(
 
     private fun startQualityUpgradeIfNeeded(query: TrackQuery, resolved: ResolvedLyrics) {
         if (!resolver.shouldUpgrade(resolved.document)) return
-        if (qualityUpgradeInFlight.containsKey(query.key) || !qualityUpgradeAttempts.allow(query.key, force = false)) return
-        val future = CompletableFuture.runAsync({ upgradeQualityAndRefresh(query, resolved) }, executor)
-        val previous = qualityUpgradeInFlight.putIfAbsent(query.key, future)
-        if (previous != null) {
-            future.cancel(true)
-            return
+        if (tasks.contains(upgradeKey(query)) || !qualityUpgradeAttempts.allow(query.key, force = false)) return
+        tasks.start(upgradeKey(query)) { isActive ->
+            if (automaticWasSuperseded(query)) return@start
+            val upgraded = resolver.resolveAutomaticFully(
+                prepareQuery(query),
+                reference = localReference(query),
+                similarity = similarityLevel(),
+            )
+            if (!isActive() || automaticWasSuperseded(query)) return@start
+            val cached = cache.getLyrics(query) ?: return@start
+            if (cached.document != resolved.document) return@start
+            if (upgraded != null && resolver.canReplace(cached.document, upgraded.document)) {
+                applyAutomaticResult(query, upgraded, isActive)
+            }
         }
-        future.whenComplete { _, _ -> qualityUpgradeInFlight.remove(query.key, future) }
     }
 
-    private fun upgradeQualityAndRefresh(query: TrackQuery, fallback: ResolvedLyrics) {
-        if (automaticWasSuperseded(query)) return
-        val upgraded = resolver.resolveAutomaticFully(query, localReference(query), similarityLevel())
-        if (automaticWasSuperseded(query)) return
-        val cached = cache.getLyrics(query) ?: return
-        if (cached.document != fallback.document) return
-        if (upgraded != null && resolver.canReplace(cached.document, upgraded.document)) {
-            applyAutomaticResult(query, upgraded)
-        }
-    }
+    private fun upgradeKey(query: TrackQuery): String = "${query.key}/upgrade"
 
     private fun localReference(query: TrackQuery): LyricsDocument? =
         localLyrics.get()?.takeIf { it.first == query.key }?.second
@@ -282,6 +286,7 @@ class LyricsLoadCoordinator(
     private fun render(query: TrackQuery, document: LyricsDocument, encoded: String? = null): String? {
         val delay = delays?.get(query) ?: 0
         if (output != null) return output.render(query, document, delay, encoded)
+        if (document.isInstrumental) return ""
         if (delay == 0 && encoded != null) return encoded
         synchronized(renderCacheLock) {
             if (document === renderedDocument && delay == renderedDelay) renderedLyrics?.let { return it }
@@ -307,10 +312,7 @@ class LyricsLoadCoordinator(
             renderedLyrics = null
         }
         output?.close()
-        activeAutomaticLoads.clear()
-        inFlight.values.forEach { it.cancel(true) }
-        qualityUpgradeInFlight.values.forEach { it.cancel(true) }
-        executor.shutdownNow()
+        tasks.close()
         resolver.close()
     }
 

@@ -7,7 +7,9 @@ import io.github.solitaire.spwlyrics.domain.CandidateScore
 import io.github.solitaire.spwlyrics.domain.LyricsSource
 import io.github.solitaire.spwlyrics.domain.ProviderSearchStatus
 import io.github.solitaire.spwlyrics.domain.ProviderSearchPhase
+import io.github.solitaire.spwlyrics.domain.TrackQuery
 import io.github.solitaire.spwlyrics.codec.TtmlVocalParts
+import io.github.solitaire.spwlyrics.codec.LyricsMetadataReader
 import io.github.solitaire.spwlyrics.storage.LyricsDelaySettings
 import java.awt.EventQueue
 import java.util.concurrent.Executors
@@ -23,6 +25,17 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
     private var trackGeneration = 0
     private var searchGeneration = 0
     private var previewGeneration = 0
+
+    fun searchMetadata(query: TrackQuery) {
+        if (closed || state.mutating) return
+        trackGeneration++
+        searchGeneration++
+        previewGeneration++
+        state = ManualSearchState(query = query, metadataOnly = true, readingTrack = false,
+            keywords = listOf(query.title, query.artists.joinToString(" ")).filter(String::isNotBlank).joinToString(" "),
+            status = "正在为编辑中的歌曲匹配在线信息与封面…")
+        search()
+    }
 
     fun refreshTrack() {
         if (closed || state.mutating || state.readingTrack && trackGeneration > 0) return
@@ -52,7 +65,7 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
     private fun invalidateSearch() {
         searchGeneration++
         previewGeneration++
-        state = state.copy(candidates = emptyList(), selected = null, document = null,
+        state = state.copy(candidates = emptyList(), selected = null, document = null, lyricsMetadata = emptyMap(),
             searching = false, previewing = false, searched = false, sourceStatuses = ProviderSearchStatus.unchecked(),
             status = "搜索条件已更改，请点击搜索。", error = false)
     }
@@ -73,7 +86,7 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
         val source = state.source
         val generation = ++searchGeneration
         previewGeneration++
-        state = state.copy(candidates = emptyList(), selected = null, document = null,
+        state = state.copy(candidates = emptyList(), selected = null, document = null, lyricsMetadata = emptyMap(),
             sourceStatuses = ProviderSearchStatus.unchecked(),
             searching = true, previewing = false, searched = false, status = "正在搜索…", error = false)
         submit({ searchGeneration == generation }, { operations.search(query, keywords, source) { update ->
@@ -94,11 +107,12 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
     fun select(row: CandidateScore) {
         if (closed || state.mutating || row !in state.candidates || state.selected == row) return
         val generation = ++previewGeneration
-        state = state.copy(selected = row, document = null, previewing = true)
+        state = state.copy(selected = row, document = null, lyricsMetadata = emptyMap(), previewing = true)
         submit({ previewGeneration == generation }, {
-            operations.preview(row.candidate)?.document?.let { it to TtmlVocalParts.mainAgent(it) }
+            operations.preview(row.candidate)?.document?.let { Triple(it, TtmlVocalParts.mainAgent(it), LyricsMetadataReader.read(it)) }
         }, { resolved ->
-            state = state.copy(document = resolved?.first, previewMainAgent = resolved?.second ?: "v1", previewing = false)
+            state = state.copy(document = resolved?.first, lyricsMetadata = resolved?.third.orEmpty(),
+                previewMainAgent = resolved?.second ?: "v1", previewing = false)
         }, { state = state.copy(previewing = false); reportFailure(it) })
     }
 
@@ -134,11 +148,12 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
         val query = state.query ?: return
         val candidate = state.selected?.candidate ?: return
         val document = state.document
+        val preserveDraft = state.metadataOnly
         val generation = searchGeneration
         state = state.copy(mutating = true, error = false, status = "正在获取在线元数据…")
         submit({ searchGeneration == generation }, { operations.metadata(candidate) }, { enriched ->
             state = state.copy(mutating = false, status = "在线元数据已读取。")
-            operations.editMetadata(query, enriched, document)
+            operations.editMetadata(query, enriched, document, preserveDraft)
         }, { state = state.copy(mutating = false); reportFailure(it) })
     }
 
