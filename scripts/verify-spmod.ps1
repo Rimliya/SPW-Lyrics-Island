@@ -33,7 +33,7 @@ try {
 
     $preferences = Read-Entry "classes/preference_config.json" | ConvertFrom-Json
     $configNames = @($preferences.configs | ForEach-Object { $_.config })
-    foreach ($required in @("island.json", "spw-lyrics.json")) {
+    foreach ($required in @("island.json", "spw-lyrics.json", "tag-workbench.json")) {
         if ($configNames -notcontains $required) { throw "Merged preferences are missing $required" }
     }
 
@@ -43,12 +43,12 @@ try {
         throw "Unexpected extensions.idx: $extensionIndex"
     }
 
-    $manifest = Read-Entry "classes/META-INF/MANIFEST.MF"
+    $manifest = (Read-Entry "classes/META-INF/MANIFEST.MF") -replace "\r?\n ", ""
     $expectedManifest = [ordered]@{
         "Plugin-Class" = "io.github.solitaire.spwlyricsisland.SPWLyricsIslandPlugin"
         "Plugin-Id" = "io.github.solitaire.spwlyricsisland"
         "Plugin-Version" = $version
-        "Plugin-Provider" = "solitaire + 大肥鱼（感谢原作者 GaBoron）"
+        "Plugin-Provider" = "solitaire + 大肥鱼（感谢原作者 GaBoron、univers629 / salt-workshop contributors）"
         "Plugin-Open-Source-Url" = "https://github.com/Rimliya/SPW-Lyrics-Island"
     }
     foreach ($key in $expectedManifest.Keys) {
@@ -74,7 +74,12 @@ try {
         "classes/native/windows-x64/ffprobe.exe",
         "classes/native/windows-x64/spw-jvm-worker.exe",
         "classes/native/windows-x64/spw-platform.exe",
-        "classes/licenses/media-runtime/LICENSE"
+        "classes/licenses/media-runtime/LICENSE",
+        "classes/licenses/tag-workbench/LICENSE",
+        "classes/licenses/tag-workbench/THIRD_PARTY_NOTICES.md",
+        "classes/licenses/tag-workbench/libebur128-COPYING.txt",
+        "classes/native/win-x64/ebur128.dll",
+        "classes/i18n/strings-zh.properties"
     )
     foreach ($required in $requiredEntries) {
         if (-not $entries.ContainsKey($required)) { throw "Missing package entry: $required" }
