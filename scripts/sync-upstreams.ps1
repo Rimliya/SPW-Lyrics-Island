@@ -1,6 +1,6 @@
 param(
     [string]$IslandRef = "main",
-    [string]$LyricsRef = "main",
+    [string]$LyricsRef = "feat/combined-workbench-entry",
     [string]$TagWorkbenchRef = "feat/embedded-workbench",
     [string]$MediaRuntimeRef = "main"
 )
