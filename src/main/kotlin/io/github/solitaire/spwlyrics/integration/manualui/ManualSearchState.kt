@@ -9,12 +9,14 @@ import io.github.solitaire.spwlyrics.storage.LyricsDelaySettings
 
 internal data class ManualSearchState(
     val query: TrackQuery? = null,
+    val metadataOnly: Boolean = false,
     val keywords: String = "",
     val source: LyricsSource? = null,
     val candidates: List<CandidateScore> = emptyList(),
     val sourceStatuses: Map<LyricsSource, ProviderSearchStatus> = ProviderSearchStatus.unchecked(),
     val selected: CandidateScore? = null,
     val document: LyricsDocument? = null,
+    val lyricsMetadata: Map<String, List<String>> = emptyMap(),
     val previewMainAgent: String = "v1",
     val delayText: String = "0",
     val savedDelay: Int = 0,
@@ -31,5 +33,5 @@ internal data class ManualSearchState(
     }
     val busy: Boolean get() = readingTrack || searching || previewing || mutating
     val canSearch: Boolean get() = query != null && !readingTrack && !searching && !mutating
-    val canMutate: Boolean get() = query != null && !busy
+    val canMutate: Boolean get() = query != null && !busy && !metadataOnly
 }

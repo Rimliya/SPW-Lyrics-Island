@@ -1,64 +1,46 @@
 package io.github.solitaire.spwlyrics.integration
 
-import io.github.solitaire.spwlyrics.application.LocalTtmlConversion
-import io.github.solitaire.spwlyrics.codec.LrcCodec
+import io.github.solitaire.spwlyrics.application.LocalLyricsConversion
 import io.github.solitaire.spwlyrics.domain.LyricsDocument
-import io.github.solitaire.spwlyrics.domain.InstrumentalLyrics
-import io.github.solitaire.spwlyrics.domain.LyricsSource
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
-import java.util.LinkedHashMap
+import java.nio.file.attribute.FileTime
 import org.jaudiotagger.audio.AudioFileIO
 import io.github.solitaire.spwlyrics.storage.EmbeddedLyricsTags
 
 /** Reads local content in the playback callback without involving online providers. */
 internal class LocalTtmlLyricsLoader(
-    private val conversion: LocalTtmlConversion = LocalTtmlConversion(),
+    private val conversion: LocalLyricsConversion = LocalLyricsConversion(),
 ) {
-    private val cache = object : LinkedHashMap<CacheKey, LyricsDocument?>(MAX_CACHE_ENTRIES, .75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<CacheKey, LyricsDocument?>?): Boolean =
-            size > MAX_CACHE_ENTRIES
+    private data class Stamp(val size: Long, val modified: FileTime)
+    private data class Snapshot(val stamps: List<Stamp?>, val document: LyricsDocument?)
+    private val snapshots = object : LinkedHashMap<Path, Snapshot>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Path, Snapshot>?): Boolean = size > 64
     }
 
     fun load(audioPath: String): LyricsDocument? = runCatching {
-        val audio = Path.of(audioPath).toAbsolutePath().normalize()
-        val name = audio.fileName?.toString() ?: return null
-        val stem = name.substringBeforeLast('.', name)
+        val audio = Path.of(audioPath)
+        val stem = audio.fileName.toString().substringBeforeLast('.', audio.fileName.toString())
         val lrc = audio.resolveSibling("$stem.lrc")
         val ttml = audio.resolveSibling("$stem.ttml")
-        val key = CacheKey(audio, stamp(audio), stamp(lrc), stamp(ttml))
-        synchronized(cache) {
-            if (cache.containsKey(key)) return cache[key]
+        val stamps = listOf(audio, lrc, ttml).map(::stamp)
+        if (stamps.first() == null) return null
+        synchronized(snapshots) { snapshots[audio]?.takeIf { it.stamps == stamps }?.let { return it.document } }
+        val document = when {
+            stamps[1] != null -> readSidecar(lrc)?.let(conversion::parse)
+            else -> {
+                val embedded = readEmbedded(audio)
+                if (embedded != null) conversion.parse(embedded) else readSidecar(ttml)?.let(conversion::parse)
+            }
         }
-        val document = read(audio, lrc, ttml)
-        synchronized(cache) { cache[key] = document }
+        synchronized(snapshots) { snapshots[audio] = Snapshot(stamps, document) }
         document
     }.getOrNull()
 
-    private fun read(audio: Path, lrc: Path, ttml: Path): LyricsDocument? {
-        if (!Files.isRegularFile(audio)) return null
-        if (Files.isRegularFile(lrc)) return readSidecar(lrc)?.let(::parseLocal)
-
-        val embedded = readEmbedded(audio)
-        if (embedded != null) return parseLocal(embedded)
-
-        return readSidecar(ttml)?.let(::parseLocal)
-    }
-
-    private fun parseLocal(raw: String): LyricsDocument? {
-        conversion.parse(raw)?.let { return it }
-        // Normal LRC remains the host's responsibility; only placeholder payloads are parsed here
-        // so the plugin can stop before starting a pointless online lookup.
-        if (!InstrumentalLyrics.isPlaceholderRaw(raw)) return null
-        return runCatching { LrcCodec.parse(raw, LyricsSource.LOCAL) }.getOrNull()
-            ?.takeIf { document -> document.lines.any { it.text.isNotBlank() } }
-    }
-
-    private fun stamp(path: Path): FileStamp? = runCatching {
-        Files.readAttributes(path, BasicFileAttributes::class.java)
-            .takeIf { it.isRegularFile }
-            ?.let { FileStamp(it.size(), it.lastModifiedTime().toMillis()) }
+    private fun stamp(path: Path): Stamp? = runCatching {
+        Files.readAttributes(path, BasicFileAttributes::class.java).takeIf { it.isRegularFile }
+            ?.let { Stamp(it.size(), it.lastModifiedTime()) }
     }.getOrNull()
 
     private fun readSidecar(path: Path): String? = runCatching {
@@ -72,15 +54,6 @@ internal class LocalTtmlLyricsLoader(
     }.getOrNull()
 
     private companion object {
-        const val MAX_CACHE_ENTRIES = 8
         const val MAX_SIDECAR_BYTES = 4_000_000L
     }
-
-    private data class FileStamp(val size: Long, val modifiedMs: Long)
-    private data class CacheKey(
-        val audio: Path,
-        val audioStamp: FileStamp?,
-        val lrcStamp: FileStamp?,
-        val ttmlStamp: FileStamp?,
-    )
 }

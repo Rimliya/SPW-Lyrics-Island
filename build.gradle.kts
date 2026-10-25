@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "io.github.solitaire.spwlyrics"
-version = "3.0.0-f.1"
+version = "3.1.0-f.1"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25
@@ -36,8 +36,12 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("com.github.houbb:opencc4j:1.14.0")
     implementation("net.jthink:jaudiotagger:3.0.1")
+    // Native decoding is leased from the separately installed SPW Media Runtime.
+    implementation("io.github.gaboron.spwmedia:spw-media-sdk:0.2.0")
     // The host renders plugin pages with its Compose classes and platform-native Skiko.
     compileOnly("org.jetbrains.compose.desktop:desktop:1.12.2")
+    // Use the host's native bridge for protocol activation, without bundling JNA.
+    compileOnly("net.java.dev.jna:jna-platform:5.18.1")
     implementation("io.github.moriafly:salt-ui:3.0.0-beta03")
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
@@ -45,9 +49,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
-tasks.test {
-    useJUnitPlatform()
-}
+tasks.test { useJUnitPlatform() }
 
 // UI components are packaged; shared runtimes and the native dispatcher belong to SPW.
 configurations.runtimeClasspath {

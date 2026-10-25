@@ -68,67 +68,81 @@ class FileLyricsCache(
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<OverrideKey, ManualOverride?>?): Boolean =
             size > 64
     }
+    private val trackLocks = Array(32) { Any() }
 
     init {
         Files.createDirectories(root)
     }
 
-    @Synchronized
     override fun getLyrics(query: TrackQuery): CachedLyrics? {
-        memory[query.key]?.takeIf(::validLyrics)?.let { return it }
-        val stored = read(layout.lyrics(query))?.let { runCatching { json.decodeFromString<CachedLyrics>(it) }.getOrNull() }
-            ?.takeIf(::validLyrics)
-        stored?.let { memory[query.key] = it }
-        return stored
+        val key = query.key
+        synchronized(memory) { memory[key]?.takeIf(::validLyrics)?.let { return it } }
+        return synchronized(trackLock(key)) {
+            synchronized(memory) { memory[key]?.takeIf(::validLyrics)?.let { return it } }
+            val stored = read(layout.lyrics(query))?.let { runCatching { json.decodeFromString<CachedLyrics>(it) }.getOrNull() }
+                ?.takeIf(::validLyrics)
+                ?.let { if (it.encoded == null) it.copy(encoded = SpwLyricsEncoder.encode(it.document)) else it }
+            stored?.let { synchronized(memory) { memory[key] = it } }
+            stored
+        }
     }
 
-    @Synchronized
     override fun hasLyrics(query: TrackQuery): Boolean {
-        memory[query.key]?.takeIf(::validLyrics)?.let { return true }
+        synchronized(memory) { memory[query.key]?.takeIf(::validLyrics)?.let { return true } }
         val modified = runCatching { Files.getLastModifiedTime(layout.lyrics(query)).toMillis() }.getOrNull()
             ?: return false
         return !expired(modified, successTtl)
     }
 
-    @Synchronized
     override fun putLyrics(query: TrackQuery, lyrics: CachedLyrics) {
-        memory[query.key] = lyrics
-        write(layout.lyrics(query), json.encodeToString(lyrics))
+        val key = query.key
+        synchronized(trackLock(key)) {
+            synchronized(memory) { memory[key] = lyrics }
+            write(layout.lyrics(query), json.encodeToString(lyrics))
+        }
     }
 
-    @Synchronized
     override fun removeLyrics(query: TrackQuery) {
-        memory.remove(query.key)
-        Files.deleteIfExists(layout.lyrics(query))
+        val key = query.key
+        synchronized(trackLock(key)) {
+            synchronized(memory) { memory.remove(key) }
+            Files.deleteIfExists(layout.lyrics(query))
+        }
     }
 
-    @Synchronized
     override fun getOverride(query: TrackQuery): ManualOverride? {
         val path = layout.override(query)
         val key = OverrideKey(query.key, stamp(path))
-        if (overrides.containsKey(key)) return overrides[key]
-        val stored = read(path)
-            ?.let { runCatching { json.decodeFromString<ManualOverride>(it) }.getOrNull() }
-            ?.takeIf { it.modelVersion == MANUAL_OVERRIDE_MODEL_VERSION }
-        overrides[key] = stored
-        return stored
+        synchronized(overrides) { if (overrides.containsKey(key)) return overrides[key] }
+        return synchronized(trackLock(query.key)) {
+            synchronized(overrides) { if (overrides.containsKey(key)) return overrides[key] }
+            val stored = read(path)
+                ?.let { runCatching { json.decodeFromString<ManualOverride>(it) }.getOrNull() }
+                ?.takeIf { it.modelVersion == MANUAL_OVERRIDE_MODEL_VERSION }
+            synchronized(overrides) { overrides[key] = stored }
+            stored
+        }
     }
 
-    @Synchronized
     override fun putOverride(query: TrackQuery, override: ManualOverride) {
-        write(layout.override(query), json.encodeToString(override))
-        invalidateOverrides(query)
-        memory.remove(query.key)
+        val key = query.key
+        synchronized(trackLock(key)) {
+            write(layout.override(query), json.encodeToString(override))
+            invalidateOverrides(query)
+            synchronized(memory) { memory.remove(key) }
+        }
     }
 
-    @Synchronized
     override fun removeOverride(query: TrackQuery) {
-        Files.deleteIfExists(layout.override(query))
-        invalidateOverrides(query)
-        memory.remove(query.key)
+        val key = query.key
+        synchronized(trackLock(key)) {
+            Files.deleteIfExists(layout.override(query))
+            invalidateOverrides(query)
+            synchronized(memory) { memory.remove(key) }
+        }
     }
 
-    private fun invalidateOverrides(query: TrackQuery) {
+    private fun invalidateOverrides(query: TrackQuery) = synchronized(overrides) {
         val iterator = overrides.keys.iterator()
         while (iterator.hasNext()) if (iterator.next().query == query.key) iterator.remove()
     }
@@ -138,6 +152,8 @@ class FileLyricsCache(
             .takeIf { it.isRegularFile }
             ?.let { FileStamp(it.size(), it.lastModifiedTime().toMillis()) }
     }.getOrNull()
+
+    private fun trackLock(key: String): Any = trackLocks[(key.hashCode() and Int.MAX_VALUE) % trackLocks.size]
 
     private fun validLyrics(value: CachedLyrics): Boolean =
         value.modelVersion == LYRICS_CACHE_MODEL_VERSION && value.encoderVersion == SpwLyricsEncoder.VERSION &&

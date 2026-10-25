@@ -1,0 +1,94 @@
+package io.github.solitaire.spwlyrics.integration.timingui
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import com.moriafly.salt.ui.*
+import com.moriafly.salt.ui.popup.*
+import io.github.solitaire.spwlyrics.domain.*
+import io.github.solitaire.spwlyrics.integration.composeui.*
+import io.github.solitaire.spwlyrics.integration.workspace.*
+
+@OptIn(UnstableSaltUiApi::class)
+@Composable
+internal fun TimingSettingsPage(controller: LyricsTimingController,
+    openCalibration: () -> Unit, close: () -> Unit) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(controller.state.busy, controller.calibration.saving) { focus.requestFocus() }
+    Column(Modifier.fillMaxSize().focusRequester(focus).focusGroup().focusable(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        JustifiedRow(startContent = { Text("打轴设置") }, endContent = { DesktopButton("关闭设置", close) },
+            verticalAlignment = Alignment.CenterVertically)
+        Box(Modifier.weight(1f).fillMaxWidth()) { TimingSettings(controller, openCalibration) }
+    }
+}
+
+/** Salt item groups keep advanced options out of the transport and capture bars. */
+@Composable
+@OptIn(UnstableSaltUiApi::class)
+internal fun TimingSettings(controller: LyricsTimingController, openCalibration: () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth >= 900.dp
+        LyricsScroll(Modifier.fillMaxSize()) {
+            if (wide) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TimingInputLatencySettings(controller, openCalibration)
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) { TimingCaptureSettings(controller) }
+            } else {
+                TimingInputLatencySettings(controller, openCalibration)
+                TimingCaptureSettings(controller)
+            }
+        }
+    }
+}
+
+@OptIn(UnstableSaltUiApi::class)
+@Composable
+private fun TimingCaptureSettings(controller: LyricsTimingController) {
+    val state = controller.state
+    var offset by rememberSaveable { mutableStateOf(state.options.offsetMs.toString()) }
+    RoundedColumn(paddingValues = PaddingValues(0.dp)) {
+        ItemSwitcher(state.options.smartFirst, { controller.options(state.options.copy(smartFirst = it)) },
+            "智能首词", enabled = !state.busy, sub = "首词的第一次 G 只记录词首")
+        ItemSwitcher(state.options.smartLast, { controller.options(state.options.copy(smartLast = it)) },
+            "智能尾词", enabled = !state.busy, sub = "句尾 G 不衔接下一句")
+        ItemDivider()
+        TimingChoiceItem("时间判定", TimingJudge.entries.toList(), state.judge, { it.label }, controller::judge, !state.busy)
+        TimingChoiceItem("所选词空拍", (0..16).toList(), state.emptyBeats[state.cursor] ?: 0, { it.toString() },
+            controller::emptyBeats, state.cursor != null && !state.busy)
+        ItemContainer {
+            @OptIn(UnstableSaltUiApi::class)
+            JustifiedRow(startContent = { Text("打轴补偿") }, endContent = {
+                DesktopField(offset, { value ->
+                    if (value.length <= 5 && value.matches(Regex("-?\\d*"))) {
+                        offset = value
+                        value.toIntOrNull()?.takeIf { it in -2000..2000 }?.let { controller.options(state.options.copy(offsetMs = it)) }
+                    }
+                }, Modifier.width(130.dp), enabled = !state.busy, suffix = "ms",
+                    invalid = offset.toIntOrNull()?.let { it !in -2000..2000 } ?: true)
+            }, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically)
+        }
+        ItemTip("正补偿让记录时间延后；空拍用于拖长音。")
+    }
+    RoundedColumn(paddingValues = PaddingValues(0.dp)) {
+        ItemTip("F/G/H 记录词首、连续轴和词尾；A/D 上下词；W/S 上下句；R/Y 定位上下词；Home/End 定位句首尾；空格播放或暂停；←/→ 跳转 1 秒；[/] 调速；' 恢复 1×。输入框内不接管按键。")
+    }
+}
+
+@OptIn(UnstableSaltUiApi::class)
+@Composable
+private fun <T> TimingChoiceItem(text: String, choices: List<T>, selected: T, title: (T) -> String,
+    select: (T) -> Unit, enabled: Boolean) {
+    ItemDropdown(text = text, value = title(selected), enabled = enabled) {
+        choices.forEach { choice ->
+            PopupMenuItem({ select(choice); state.dismiss() }, text = title(choice), selected = choice == selected)
+        }
+    }
+}
