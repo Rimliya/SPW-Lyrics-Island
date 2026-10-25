@@ -84,6 +84,21 @@ PingFang-style lyric font (PingFang.ttc), provided by the fork maintainer.
 Bundled as the default lyric font. Source and usage terms are recorded in
 licenses/PingFang-NOTICE.txt.
 
+SPW Tag Workbench
+Copyright (C) 2026 salt-workshop contributors
+https://github.com/univers629/SPW-Tag-Workbench
+Fork: https://github.com/Rimliya/SPW-Tag-Workbench
+Source branch: feat/embedded-workbench
+Licensed under GNU General Public License, version 3 only (GPL-3.0-only).
+Embedded as modules/tag-workbench and adapted by the Combined distribution:
+standalone plugin lifecycle, sidebar, floating button, AppNavigation replacement
+and extension registration were removed. The combined adapter owns initialization,
+playback forwarding and the unified Lyrics/Workbench entry. Tag editing, artwork,
+lyrics, spectrum, timing and ReplayGain code remains attributed to its upstream.
+Full license and third-party notices: licenses/tag-workbench/.
+libebur128 1.2.6 is Copyright (c) 2011 Jan Kokemuller and licensed under MIT;
+its license is included at licenses/tag-workbench/libebur128-COPYING.txt.
+
 Combined SPW Lyrics Island distribution
 SPW Lyrics module Copyright (C) 2026 GaBoron, licensed under the MIT License.
 The MIT text is preserved at licenses/SPW-Lyrics-MIT.txt.

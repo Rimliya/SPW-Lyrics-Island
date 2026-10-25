@@ -1,6 +1,6 @@
 # 同步上游与发版
 
-## 同步三个上游
+## 同步四个上游
 
 ```powershell
 ./scripts/sync-upstreams.ps1
@@ -11,6 +11,7 @@
 ```powershell
 git subtree pull --prefix modules/island https://github.com/Rimliya/SPW-island.git main --squash
 git subtree pull --prefix modules/lyrics https://github.com/Rimliya/SPW-Lyrics.git main --squash
+git subtree pull --prefix modules/tag-workbench https://github.com/Rimliya/SPW-Tag-Workbench.git feat/embedded-workbench --squash
 git subtree pull --prefix modules/media-runtime https://github.com/GaBoron/SPW-Media-Runtime.git main --squash
 ```
 
@@ -21,6 +22,7 @@ git subtree pull --prefix modules/media-runtime https://github.com/GaBoron/SPW-M
 - 新设置页仍由 `preference_config.json` 自动合并；
 - 若上游新增 Extension，合并适配器需要新增对应转发方法；
 - 若上游新增原生文件或资源，更新根 `processResources` 和 `sourceArchive`。
+- 若 Tag Workbench 升级，先同步其上游到 fork，再同步 `feat/embedded-workbench`；保留 `EmbeddedWorkbench.kt` 的解除 Hook 适配。
 - 若 Media Runtime 升级，同时更新 `mediaRuntimeVersion`、内置适配器和版本表。
 
 同步后更新 `README.md` 的“来源版本”表，并运行：

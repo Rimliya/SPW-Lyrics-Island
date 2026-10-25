@@ -13,7 +13,6 @@ import io.github.solitaire.spwlyrics.integration.composeui.*
 import io.github.solitaire.spwlyrics.integration.manualui.ManualSearchContent
 import io.github.solitaire.spwlyrics.integration.metadataui.MetadataDiscardDialog
 import io.github.solitaire.spwlyrics.integration.metadataui.MetadataEditorContent
-import io.github.univers629.spwtagworkbench.EmbeddedWorkbenchContent
 
 @Composable
 internal fun LyricsWorkspaceContent(session: LyricsWorkspaceSession, close: () -> Unit) {
@@ -32,7 +31,14 @@ internal fun LyricsWorkspaceContent(session: LyricsWorkspaceSession, close: () -
                 pages.SaveableStateProvider(page.name) {
                     LyricsViewport(Modifier.fillMaxSize()) {
                         when (page) {
-                            LyricsToolPage.TAG_WORKBENCH -> EmbeddedWorkbenchContent { session.select(LyricsToolPage.BATCH) }
+                            LyricsToolPage.TAG_WORKBENCH -> {
+                                val provider = LyricsWorkspacePageRegistry.workbench
+                                if (provider == null) {
+                                    LyricsStatus("标签工作台尚未就绪，请重新启用插件。", error = true)
+                                } else {
+                                    provider.Content { session.requestClose(close) }
+                                }
+                            }
                             LyricsToolPage.SEARCH -> ManualSearchContent(session.manual)
                             LyricsToolPage.METADATA -> MetadataEditorContent(session.metadata, session.timing, session.lyricsView, { session.lyricsView = it })
                             LyricsToolPage.BATCH -> BatchProcessingContent(session.batch)

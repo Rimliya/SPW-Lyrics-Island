@@ -6,13 +6,14 @@
 | --- | --- |
 | `modules/island` | 灵动词岛上游快照，包含窗口、绘制、Spout2、原生组件与设置 |
 | `modules/lyrics` | SPW Lyrics 上游快照，包含来源搜索、匹配、缓存、手动搜索和批量处理 |
+| `modules/tag-workbench` | SPW Tag Workbench 嵌入式分支，包含标签、封面、艺术家图、频谱、打轴与 ReplayGain |
 | `modules/media-runtime` | SPW Media Runtime 快照，包含媒体处理、播放器、频谱、WebView2 和原生资源 |
 | `modules/combined` | 只包含合并生命周期和播放扩展适配器 |
 | `src/main/resources` | 单一插件清单、源码链接和构建时生成的合并设置页 |
 | `scripts` | 上游同步与 `.spmod` 校验 |
 | `.github/workflows` | Windows 构建、artifact 和 tag 发布 |
 
-三个上游目录视为快照。合并相关的新逻辑应放在 `modules/combined`；需要修改上游行为时，先在对应的 fork 仓库提交，再通过 subtree 同步回来。Media Runtime 仅对嵌入式身份和插件布局做最小适配。
+四个上游目录视为快照。合并相关的新逻辑应放在 `modules/combined`；需要修改上游行为时，先在对应的 fork 仓库提交，再通过 subtree 同步回来。Tag Workbench 的嵌入式生命周期只保留在 `EmbeddedWorkbench.kt`，其独立 `MainPlugin`、侧栏和 AppNavigation Hook 在 Combined 构建中排除。
 
 ## 生命周期
 
@@ -20,16 +21,19 @@
 
 1. 启动词岛运行时；
 2. 启动内置 `MediaRuntimePlugin`，注册 JVM-local Runtime endpoint；
-3. 安装 `PluginRuntime`（SPW Lyrics）；
-4. 任一步失败时回滚已启动的部分；
-5. 停止时先关闭歌词和 Runtime，再关闭词岛运行时。
+3. 启动 Tag Workbench 的嵌入式运行时，不注册独立插件或宿主 Hook；
+4. 向 Lyrics 的通用页面注册点注入工作台 UI；
+5. 安装 `PluginRuntime`（SPW Lyrics）；
+6. 任一步失败时按逆序回滚已启动的部分；
+7. 停止时先解除页面注册，再关闭歌词、Tag Workbench、Runtime 和词岛运行时。
 
 ## 播放回调
 
 宿主只看到一个 `SPWLyricsIslandPlaybackExtension`。它把回调同时转发给：
 
 - `IslandPlaybackExtension`：播放时间线、歌词行和状态；
-- `SpwLyricsExtension`：本地歌词缺失检查与歌词替换。
+- `SpwLyricsExtension`：本地歌词缺失检查与歌词替换；
+- Tag Workbench 的 `Repo`：曲目、播放状态、位置与歌词行，并由其自身轮询作为兜底。
 
 这样既不依赖宿主对多个 Extension 的加载顺序，也不需要把两边的业务代码交叉引用。
 
@@ -40,17 +44,20 @@
 ```text
 modules/island/src/main/resources/preference_config.json
 modules/lyrics/src/main/resources/preference_config.json
+modules/tag-workbench/src/main/resources/preference_config.json
 ```
 
-然后把两个 `configs` 数组拼成一个 `preference_config.json`。两个模块自己的 `META-INF/extensions.idx` 和 `project.properties` 不参与根包，根项目提供唯一版本。
+然后把三个 `configs` 数组拼成一个 `preference_config.json`。各模块自己的 `META-INF/extensions.idx`、`project.properties` 和独立插件清单不参与根包，根项目提供唯一版本。Tag Workbench 的 i18n、`ebur128.dll`、GPL 文本和 libebur128 许可由根 `processResources` 合并。
 
 ## 依赖
 
 `modules/media-runtime` 通过 included build 参与编译。根项目把 Runtime 的 JVM 组件放入 `lib/`，把 Windows 原生组件放入 `classes/native/windows-x64/`，最终只打一个 `.spmod`。Kotlin、Workshop API 和 PF4J 仍由 SPW 宿主提供，不随包重复分发。
 ## 占用与回调优化
 
-- 根项目只打包一套 Compose、Skiko、JNA、Jaudiotagger 和字体资源，两个模块不会各自携带副本。
+- 根项目只打包一套 Compose、Skiko、JNA、Jaudiotagger 和字体资源，各模块不会各自携带副本。
+- Lyrics 只暴露 `LyricsWorkspacePageProvider` 通用注册点；Combined 注入 Tag Workbench UI，Lyrics 不直接引用 Tag Workbench 类。
+- Tag Workbench 不再安装侧栏、FAB、AppNavigation 替换或第二个播放 Extension。
 - `lib/kotlin-stdlib-*.jar` 由 SPW 宿主提供，打包时明确排除。
 - 手动搜索和批量处理窗口在第一次打开时才加载 Compose/Skiko；不用这些窗口时不会初始化额外渲染上下文。
 - 宿主只注册一个播放 Extension。每秒位置回调只转发给词岛；歌词加载回调按需同时转发给两个模块。
-- `combinedChecks` 在不启动 SPW 的情况下验证合并设置、Extension 注册和两个回调代理；`verify-spmod.ps1` 再检查重复库名和 Kotlin 标准库泄漏。
+- `combinedChecks` 在不启动 SPW 的情况下验证合并设置、Extension 注册、各回调代理、Tag Workbench 资源与页面注册；`verify-spmod.ps1` 再检查重复库名和 Kotlin 标准库泄漏。

@@ -4,14 +4,15 @@ import com.xuncorp.spw.workshop.api.PluginContext
 import dev.gaboron.spwmedia.host.MediaRuntimePlugin
 import io.github.univers629.spwtagworkbench.EmbeddedWorkbenchRuntime
 import io.github.solitaire.spwlyrics.integration.PluginRuntime
+import io.github.solitaire.spwlyrics.integration.workspace.LyricsWorkspacePageRegistry
 import io.github.solitaire.spwlyrics.storage.DataDirectory
 import io.github.solitaire.spwisland.host.IslandPlugin
 import io.github.solitaire.spwisland.host.LegacyConfigMigration
 import io.github.solitaire.spwisland.ui.IslandMenuActions
 
 /**
- * Root lifecycle adapter. The two upstream modules keep their own runtimes and can be updated
- * independently; this class only coordinates startup and shutdown between them.
+ * Root lifecycle adapter. Upstream modules keep their own runtimes and can be updated
+ * independently; this class coordinates startup, page registration and shutdown between them.
  */
 class SPWLyricsIslandPlugin(context: PluginContext) : IslandPlugin(context) {
     private var mediaRuntime: MediaRuntimePlugin? = null
@@ -36,19 +37,18 @@ class SPWLyricsIslandPlugin(context: PluginContext) : IslandPlugin(context) {
                 embeddedPluginId = pluginContext.pluginId,
                 embeddedStorage = DataDirectory.root.resolve("media-runtime"),
             ).also { it.start() }
-            runCatching {
-                EmbeddedWorkbenchRuntime.start(
-                    pluginId = pluginContext.pluginId,
-                    pluginVersion = pluginContext.pluginVersion,
-                    spwVersion = pluginContext.spwVersion,
-                    pluginPath = pluginContext.pluginPath,
-                )
-            }.onFailure {
-                System.getLogger("SPW Lyrics Island").log(System.Logger.Level.WARNING, "内置标签工作台启动失败", it)
-            }
+            EmbeddedWorkbenchRuntime.start(
+                pluginId = pluginContext.pluginId,
+                pluginVersion = pluginContext.pluginVersion,
+                spwVersion = pluginContext.spwVersion,
+                pluginPath = pluginContext.pluginPath,
+            )
+            LyricsWorkspacePageRegistry.setWorkbench(EmbeddedTagWorkbenchPage)
             PluginRuntime.install(pluginContext.pluginId, pluginContext.spwChannel)
         } catch (error: Throwable) {
+            LyricsWorkspacePageRegistry.setWorkbench(null)
             runCatching { PluginRuntime.close() }
+            runCatching { EmbeddedWorkbenchRuntime.stop() }
             runCatching { mediaRuntime?.stop() }
             mediaRuntime = null
             super.stop()
@@ -58,6 +58,7 @@ class SPWLyricsIslandPlugin(context: PluginContext) : IslandPlugin(context) {
 
     override fun stop() {
         try {
+            LyricsWorkspacePageRegistry.setWorkbench(null)
             PluginRuntime.close()
         } finally {
             runCatching { EmbeddedWorkbenchRuntime.stop() }

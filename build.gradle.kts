@@ -169,6 +169,12 @@ tasks.processResources {
     from("modules/tag-workbench/src/main/resources/META-INF/LICENSE") {
         into("licenses/tag-workbench"); rename { "LICENSE" }
     }
+    from("modules/tag-workbench/THIRD_PARTY_NOTICES.md") {
+        into("licenses/tag-workbench")
+    }
+    from("modules/tag-workbench/native/COPYING") {
+        into("licenses/tag-workbench"); rename { "libebur128-COPYING.txt" }
+    }
     dependsOn("buildSpectrum", "buildWindowsTray", "buildWindowsGlass", "buildSpout")
     from(layout.buildDirectory.file("native/spw-spectrum.exe")) { into("native") }
     from(layout.buildDirectory.file("native/spw-island-tray.exe")) { into("native") }

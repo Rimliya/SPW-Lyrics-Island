@@ -24,6 +24,24 @@ Windows 发送器静态链接 leadedge/Spout2 `2.007.017` 的 DirectX 11 必需�
 
 `AmllMotion.kt` 保持 **AGPL-3.0-only**，其他原有程序文件保留 **GPL-3.0-only**。依据 GPLv3 与 AGPLv3 的第 13 条组合分发，同时保留两份许可和完整对应源码；这不改变 Lyricify 原创的 CC BY-SA 4.0 许可。详见 [NOTICE](NOTICE) 中的来源、改动日期及组合说明。
 
+## SPW Tag Workbench
+
+“音乐标签工作台 / SPW Tag Workbench”来源于
+[salt-workshop / SPW-Tag-Workbench](https://github.com/univers629/SPW-Tag-Workbench)，
+Copyright (C) 2026 salt-workshop contributors，采用 **GPL-3.0-only**。本项目从
+[Rimliya/SPW-Tag-Workbench](https://github.com/Rimliya/SPW-Tag-Workbench) 的
+`feat/embedded-workbench` 分支嵌入 `modules/tag-workbench`。
+
+为适配 Combined 发行版，移除了独立插件 ID、侧栏、悬浮按钮、AppNavigation
+替换和独立 Extension 注册；保留标签读写、封面 / 艺术家图、歌词、频谱、打轴、
+批量匹配与 ReplayGain 能力，由 Combined 统一初始化、转发播放状态并注册页面。
+原项目的完整 GPL 许可与第三方声明随包保存在 `licenses/tag-workbench/`。
+
+其中的 [libebur128](https://github.com/jiixyj/libebur128) 1.2.6 由 Jan Kokemüller
+以 MIT 许可发布，用于 ReplayGain / EBU R128 响度测量。其许可原文随包保存为
+`licenses/tag-workbench/libebur128-COPYING.txt`，对应源码位于
+`modules/tag-workbench/native/`。
+
 ## 依赖与构建工具
 
 [AndroidLiquidGlass / Backdrop](https://github.com/Kyant0/AndroidLiquidGlass)，Copyright 2025 Kyant，采用 [Apache-2.0](licenses/Apache-2.0.txt)。参考提交 `65ab177e90e5c1d8c62e70cf7755841982da65f6`；2026-10-15 将 `internal/Shaders.kt` 的 Lens、七采样色散与 Default Highlight 移植到 `IslandGlassShaders.kt`，并在 Skia 中复现 `ColorFilter.kt`、`HighlightModifier.kt` 的 Vibrancy、滤镜顺序及独立 PLUS 高光合成。使用真实 Windows 桌面裁片；轮廓距离与法线适配原有动态 Path，限制色散并减弱背光侧，未引入 Compose 组件。原始声明与改动见 [NOTICE](NOTICE)。
@@ -58,6 +76,7 @@ Windows 发送器静态链接 leadedge/Spout2 `2.007.017` 的 DirectX 11 必需�
 - `modules/lyrics`（SPW Lyrics）：Copyright (C) 2026 GaBoron，MIT License，全文见 `licenses/SPW-Lyrics-MIT.txt`。
 - [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization)：Apache-2.0，用于 JSON 与歌词数据序列化。
 - [OpenCC4J](https://github.com/houbb/opencc4j)：Apache-2.0，用于繁简 / 字形匹配。
-- 合并层 `modules/combined` 仅协调两个模块的启动、停止和播放回调，不改变各上游模块的许可。
+- `modules/tag-workbench`（SPW Tag Workbench）：Copyright (C) 2026 salt-workshop contributors，GPL-3.0-only，嵌入后的完整声明见 `licenses/tag-workbench/`。
+- 合并层 `modules/combined` 只协调各内部模块的启动、停止、页面和播放回调，不改变上游模块的许可。
 
 完整源码随每个 `.spmod` 的 `source/` 目录提供，并在对应 GitHub Release 中附带源码压缩包。
