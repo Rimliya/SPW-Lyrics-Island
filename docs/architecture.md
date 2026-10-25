@@ -6,21 +6,23 @@
 | --- | --- |
 | `modules/island` | 灵动词岛上游快照，包含窗口、绘制、Spout2、原生组件与设置 |
 | `modules/lyrics` | SPW Lyrics 上游快照，包含来源搜索、匹配、缓存、手动搜索和批量处理 |
+| `modules/media-runtime` | SPW Media Runtime 快照，包含媒体处理、播放器、频谱、WebView2 和原生资源 |
 | `modules/combined` | 只包含合并生命周期和播放扩展适配器 |
 | `src/main/resources` | 单一插件清单、源码链接和构建时生成的合并设置页 |
 | `scripts` | 上游同步与 `.spmod` 校验 |
 | `.github/workflows` | Windows 构建、artifact 和 tag 发布 |
 
-两个上游目录视为只读快照。合并相关的新逻辑应放在 `modules/combined`；需要修改上游行为时，先在对应的 fork 仓库提交，再通过 subtree 同步回来。
+三个上游目录视为快照。合并相关的新逻辑应放在 `modules/combined`；需要修改上游行为时，先在对应的 fork 仓库提交，再通过 subtree 同步回来。Media Runtime 仅对嵌入式身份和插件布局做最小适配。
 
 ## 生命周期
 
 `SPWLyricsIslandPlugin` 继承词岛的 `IslandPlugin`：
 
 1. 启动词岛运行时；
-2. 安装 `PluginRuntime`（SPW Lyrics）；
-3. 任一步失败时回滚已启动的部分；
-4. 停止时先关闭歌词运行时，再关闭词岛运行时。
+2. 启动内置 `MediaRuntimePlugin`，注册 JVM-local Runtime endpoint；
+3. 安装 `PluginRuntime`（SPW Lyrics）；
+4. 任一步失败时回滚已启动的部分；
+5. 停止时先关闭歌词和 Runtime，再关闭词岛运行时。
 
 ## 播放回调
 
@@ -44,7 +46,7 @@ modules/lyrics/src/main/resources/preference_config.json
 
 ## 依赖
 
-根项目取两个模块依赖的并集，并只打一个 `.spmod`。Kotlin、Workshop API 和 PF4J 仍由 SPW 宿主提供，不随包重复分发。
+`modules/media-runtime` 通过 included build 参与编译。根项目把 Runtime 的 JVM 组件放入 `lib/`，把 Windows 原生组件放入 `classes/native/windows-x64/`，最终只打一个 `.spmod`。Kotlin、Workshop API 和 PF4J 仍由 SPW 宿主提供，不随包重复分发。
 ## 占用与回调优化
 
 - 根项目只打包一套 Compose、Skiko、JNA、Jaudiotagger 和字体资源，两个模块不会各自携带副本。

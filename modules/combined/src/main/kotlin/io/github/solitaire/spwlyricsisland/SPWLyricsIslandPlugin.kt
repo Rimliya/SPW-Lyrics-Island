@@ -1,7 +1,9 @@
 package io.github.solitaire.spwlyricsisland
 
 import com.xuncorp.spw.workshop.api.PluginContext
+import dev.gaboron.spwmedia.host.MediaRuntimePlugin
 import io.github.solitaire.spwlyrics.integration.PluginRuntime
+import io.github.solitaire.spwlyrics.storage.DataDirectory
 import io.github.solitaire.spwisland.host.IslandPlugin
 import io.github.solitaire.spwisland.host.LegacyConfigMigration
 import io.github.solitaire.spwisland.ui.IslandMenuActions
@@ -11,6 +13,7 @@ import io.github.solitaire.spwisland.ui.IslandMenuActions
  * independently; this class only coordinates startup and shutdown between them.
  */
 class SPWLyricsIslandPlugin(context: PluginContext) : IslandPlugin(context) {
+    private var mediaRuntime: MediaRuntimePlugin? = null
     override fun menuActions(): IslandMenuActions = object : IslandMenuActions {
         override fun canDisableCurrentLyrics() = PluginRuntime.canDisableCurrentLyrics()
         override fun disableCurrentLyrics() = PluginRuntime.disableCurrentLyrics()
@@ -27,9 +30,16 @@ class SPWLyricsIslandPlugin(context: PluginContext) : IslandPlugin(context) {
     override fun start() {
         super.start()
         try {
-            PluginRuntime.install()
+            mediaRuntime = MediaRuntimePlugin(
+                pluginContext,
+                embeddedPluginId = pluginContext.pluginId,
+                embeddedStorage = DataDirectory.root.resolve("media-runtime"),
+            ).also { it.start() }
+            PluginRuntime.install(pluginContext.pluginId, pluginContext.spwChannel)
         } catch (error: Throwable) {
             runCatching { PluginRuntime.close() }
+            runCatching { mediaRuntime?.stop() }
+            mediaRuntime = null
             super.stop()
             throw error
         }
@@ -39,6 +49,8 @@ class SPWLyricsIslandPlugin(context: PluginContext) : IslandPlugin(context) {
         try {
             PluginRuntime.close()
         } finally {
+            runCatching { mediaRuntime?.stop() }
+            mediaRuntime = null
             super.stop()
         }
     }

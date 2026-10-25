@@ -68,7 +68,13 @@ try {
         "classes/native/spw-island-tray.exe",
         "classes/native/spw-spout.dll",
         "classes/native/spw-island-glass.dll",
-        "classes/native/compose/skiko-windows-x64.dll"
+        "classes/native/compose/skiko-windows-x64.dll",
+        "classes/native/windows-x64/assets.properties",
+        "classes/native/windows-x64/ffmpeg.exe",
+        "classes/native/windows-x64/ffprobe.exe",
+        "classes/native/windows-x64/spw-jvm-worker.exe",
+        "classes/native/windows-x64/spw-platform.exe",
+        "classes/licenses/media-runtime/LICENSE"
     )
     foreach ($required in $requiredEntries) {
         if (-not $entries.ContainsKey($required)) { throw "Missing package entry: $required" }
@@ -82,6 +88,11 @@ try {
         Group-Object | Where-Object Count -gt 1)
     if ($duplicateLibraries.Count) { throw "Duplicate library file names: $($duplicateLibraries.Name -join ', ')" }
     if ($libraries.Count -eq 0) { throw "No runtime libraries were packaged" }
+    foreach ($required in @("spw-media-spw-adapter-", "spw-media-sdk-", "spw-media-runtime-core-", "spw-media-native-worker-")) {
+        if (-not @($libraries | Where-Object { (Split-Path $_ -Leaf).StartsWith($required) }).Count) {
+            throw "Embedded Media Runtime library is missing: $required"
+        }
+    }
     if (-not @($entries.Keys | Where-Object { $_ -match "^source/.+\.zip$" }).Count) {
         throw "Source archive is missing from the package"
     }

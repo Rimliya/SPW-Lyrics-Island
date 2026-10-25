@@ -1,6 +1,7 @@
 param(
     [string]$IslandRef = "main",
-    [string]$LyricsRef = "main"
+    [string]$LyricsRef = "main",
+    [string]$MediaRuntimeRef = "main"
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,8 +14,11 @@ try {
     git subtree pull --prefix modules/lyrics https://github.com/Rimliya/SPW-Lyrics.git $LyricsRef --squash
     if ($LASTEXITCODE -ne 0) { throw "Failed to sync modules/lyrics" }
 
+    git subtree pull --prefix modules/media-runtime https://github.com/GaBoron/SPW-Media-Runtime.git $MediaRuntimeRef --squash
+    if ($LASTEXITCODE -ne 0) { throw "Failed to sync modules/media-runtime" }
+
     $commit = git rev-parse --short=7 HEAD
-    Write-Host "Synced both modules into $commit. Update the source version table before releasing."
+    Write-Host "Synced all modules into $commit. Update the source version table before releasing."
 } finally {
     Pop-Location
 }

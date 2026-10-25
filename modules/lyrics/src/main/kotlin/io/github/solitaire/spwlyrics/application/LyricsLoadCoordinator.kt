@@ -143,6 +143,18 @@ class LyricsLoadCoordinator(
         return true
     }
 
+    /** True when the current track is showing an automatically fetched karaoke document. */
+    fun canDisableCurrentLyrics(query: TrackQuery): Boolean {
+        if (current.get()?.key != query.key) return false
+        val override = cache.getOverride(query)
+        if (override?.local == true || override?.candidate != null) return false
+        val cached = cache.getLyrics(query) ?: return false
+        return cached.document.lines.any { it.words.isNotEmpty() }
+    }
+
+    /** Blocks automatic lyrics for this track and falls back to its local lyrics. */
+    fun disableCurrentLyrics(query: TrackQuery): Boolean = useLocal(query)
+
     fun useAutomatic(query: TrackQuery): Boolean {
         if (current.get()?.key != query.key) return false
         synchronized(selectionLock) {

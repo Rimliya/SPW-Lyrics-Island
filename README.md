@@ -1,6 +1,6 @@
 # SPW Lyrics Island
 
-将 **灵动词岛** 与 **SPW Lyrics** 合并为一个 `.spmod`：歌词岛负责显示，SPW Lyrics 负责从多个来源搜索、匹配、缓存并刷新逐字歌词。
+将 **灵动词岛**、**SPW Lyrics** 与 **SPW Media Runtime** 合并为一个 `.spmod`：歌词岛负责显示，SPW Lyrics 负责从多个来源搜索、匹配、缓存并刷新逐字歌词，Media Runtime 直接提供频谱打轴所需的音频处理能力。
 
 > 插件作者：`solitaire + 大肥鱼`。本项目是基于两个上游模块的合并发行版，Windows x64 专用，保留 OBS Spout2 透明输出。感谢原作者 GaBoron。
 > 当前 `gpu-experimental` 分支使用 GPU 实验版词岛模块（Spout2 直接复用 Skia GPU 帧），其余组合逻辑与 `main` 相同。
@@ -23,6 +23,8 @@ Release 只提供一个运行包：`spw-lyrics-island-<版本>.spmod`。不要�
 - OBS Spout2：默认开启的独立透明输出，默认 30 FPS、1280×512，可在 30 / 60 FPS 间切换；低性能模式约 15 FPS。
 - 默认字体：内置苹方，仍可切换内置 MiSans 或系统字体。
 - SPW Lyrics：支持 AMLL TTML、QQ 音乐、汽水音乐、酷狗音乐、网易云音乐、Apple Music、LrcShare，并从 MusicBrainz 获取元数据；可选择类型优先或来源优先。\n- 保留本地歌词相似度校验、纯音乐占位拦截、手动搜索、批量缓存、逐曲延迟、歌曲元数据/内嵌歌词编辑和下一首预取。
+- 频谱打轴：内置 SPW Media Runtime 0.2.0，不再要求另行安装 Runtime 插件。
+- 保留本地歌词相似度校验、纯音乐占位拦截、手动搜索、批量缓存、逐曲延迟、歌曲元数据/内嵌歌词编辑和下一首预取。
 - 词岛右键可“禁用当前获取的逐字歌词”：自动结果不匹配时按曲目退回本地歌词，再从 SPW Lyrics 设置中手动搜索正确结果。
 - 两个配置页合并到同一个插件设置中：`灵动词岛` 与 `SPW Lyrics`。
 
@@ -33,11 +35,12 @@ Release 只提供一个运行包：`spw-lyrics-island-<版本>.spmod`。不要�
 ```text
 modules/island    ← Rimliya/SPW-island
 modules/lyrics    ← Rimliya/SPW-Lyrics
+modules/media-runtime ← GaBoron/SPW-Media-Runtime
 modules/combined  ← 只负责生命周期与播放回调适配
 src/main/resources ← 单一插件清单、合并后的设置页
 ```
 
-根 Gradle 项目同时编译三个 Kotlin 源目录，并只调用一次 `spmod` 打包。两边的设置 JSON 在构建时自动合并；`extensions.idx` 只注册一个适配器，由适配器分别转发给两个模块。
+根 Gradle 项目同时编译三个模块，`modules/media-runtime` 作为 included build 参与编译；Runtime 的 JVM 组件进入 `lib/`，原生组件进入 `native/windows-x64/`。最终仍只生成一个 `.spmod`，不会另外安装 Runtime 插件。
 
 同步方法见 [docs/updating.md](docs/updating.md)，架构说明见 [docs/architecture.md](docs/architecture.md)。
 
@@ -46,9 +49,10 @@ src/main/resources ← 单一插件清单、合并后的设置页
 | 模块 | 来源 | 记录版本 | 提交 |
 | --- | --- | --- | --- |
 | `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.3.0-GPU` | `b52906a` |
-| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `3.0.0-f.1` | `5d40d15` |
+| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `3.1.0-f.1` | `6815f2b` |
+| `modules/media-runtime` | [GaBoron/SPW-Media-Runtime](https://github.com/GaBoron/SPW-Media-Runtime) | `0.2.0` | `ad63eed` |
 
-原始项目：[GaBoron/SPW-island](https://github.com/GaBoron/SPW-island)、[GaBoron/SPW-Lyrics](https://github.com/GaBoron/SPW-Lyrics)。
+原始项目：[GaBoron/SPW-island](https://github.com/GaBoron/SPW-island)、[GaBoron/SPW-Lyrics](https://github.com/GaBoron/SPW-Lyrics)、[GaBoron/SPW-Media-Runtime](https://github.com/GaBoron/SPW-Media-Runtime)。
 
 ## 构建与发布
 
@@ -65,4 +69,4 @@ src/main/resources ← 单一插件清单、合并后的设置页
 
 ## 许可
 
-灵动词岛原创概念来自 Lyricify / WXRIW（CC BY-SA 4.0）。灵动词岛程序采用 GPL-3.0-only，AMLL 动画移植部分采用 AGPL-3.0-only；SPW Lyrics 采用 MIT。合并发行版保留两边的 LICENSE、NOTICE 和第三方许可材料。详见 [NOTICE](NOTICE)、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [licenses](licenses)。
+灵动词岛原创概念来自 Lyricify / WXRIW（CC BY-SA 4.0）。灵动词岛程序采用 GPL-3.0-only，AMLL 动画移植部分采用 AGPL-3.0-only；SPW Lyrics 采用 MIT；SPW Media Runtime 采用 Apache-2.0，内置 FFmpeg/libmpv 等组件继续遵循各自许可。合并发行版保留全部 LICENSE、NOTICE 和第三方许可材料。详见 [NOTICE](NOTICE)、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [licenses](licenses)。

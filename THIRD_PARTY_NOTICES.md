@@ -43,6 +43,9 @@ Windows 发送器静态链接 leadedge/Spout2 `2.007.017` 的 DirectX 11 必需�
 | [Kotlin / kotlinx.coroutines](https://github.com/JetBrains/kotlin)，JetBrains | 编译工具、标准库与绘制调度运行库；随包提供 | Apache-2.0；[完整文本](licenses/Apache-2.0.txt) |
 | [PF4J](https://github.com/pf4j/pf4j)，Decebal Suiu | 编译使用 3.12.0，由宿主提供 | Apache-2.0 |
 | [Gradle](https://github.com/gradle/gradle)，Gradle contributors | Wrapper 来自 SPW API 0.1.0-dev20，构建使用 9.8.0 | Apache-2.0；Wrapper 自带声明保留，发行包不内嵌 Gradle 发行版 |
+| [SPW Media Runtime](https://github.com/GaBoron/SPW-Media-Runtime)，GaBoron | 0.2.0 源码作为内部模块编译；JVM 组件与 Windows 原生组件直接进入 Combined 包 | Apache-2.0；完整文本与第三方材料位于 `licenses/media-runtime/` |
+| [FFmpeg / FFprobe](https://ffmpeg.org/)，FFmpeg contributors | Runtime 0.2.0 内置 LGPL shared 构建，用于频谱打轴音频解码 | LGPL；许可证与匹配源码归档说明随 `licenses/media-runtime/` 分发 |
+| [libmpv / libplacebo](https://github.com/mpv-player/mpv)，mpv contributors | Runtime 0.2.0 内置 `gpl=false` Windows 构建 | LGPL-2.1-or-later；许可证与源码来源随 Runtime 材料分发 |
 
 运行时所用 Windows 和 Java 由其原供应方提供，遵循各自条款。插件不附带音乐、封面或歌词内容，也不改变这些内容的权利归属。
 

@@ -199,6 +199,28 @@ object PluginRuntime {
         toastWarning(if (settings?.resetSelection() == true) "已恢复默认歌词排序。关闭并重新打开设置可查看默认顺序。" else "重置未完成，请重新打开设置后重试。")
     }
 
+    fun canDisableCurrentLyrics(): Boolean {
+        val active = coordinator ?: return false
+        val query = currentQuery() ?: return false
+        return runCatching { active.canDisableCurrentLyrics(query) }.getOrDefault(false)
+    }
+
+    fun disableCurrentLyrics(): Boolean {
+        val active = coordinator ?: return false
+        val query = currentQuery() ?: return false
+        Thread({
+            val disabled = runCatching { active.disableCurrentLyrics(query) }.getOrDefault(false)
+            runCatching {
+                WorkshopApi.ui.toast(
+                    if (disabled) "已禁用本曲自动歌词；可在插件设置中打开手动搜索选择正确歌词。"
+                    else "未禁用：当前歌词已切换或不可用。",
+                    if (disabled) WorkshopApi.Ui.ToastType.Warning else WorkshopApi.Ui.ToastType.Error,
+                )
+            }
+        }, "spw-lyrics-disable-current").apply { isDaemon = true }.start()
+        return true
+    }
+
     @Synchronized
     fun close() {
         hostUi?.close()
