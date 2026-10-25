@@ -30,7 +30,7 @@ internal class HostUiBridge(val targets: HostUiDiscovery.Targets, private val lo
     var replaying = false
         private set
     private var navigator: Any? = null
-    private val openPage: () -> Unit = { workspace.open(LyricsToolPage.BATCH) }
+    private val openPage: () -> Unit = { workspace.open(LyricsToolPage.TAG_WORKBENCH) }
 
     fun method(key: HostBytecodeIndex.Method): Method {
         val signature = MethodType.fromMethodDescriptorString(key.descriptor(), loader)
