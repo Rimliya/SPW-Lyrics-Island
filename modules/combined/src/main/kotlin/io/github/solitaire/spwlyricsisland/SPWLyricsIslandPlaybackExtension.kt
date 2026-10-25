@@ -4,6 +4,7 @@ import com.xuncorp.spw.workshop.api.PlaybackExtensionPoint
 import io.github.solitaire.spwlyrics.integration.SpwLyricsExtension
 import io.github.solitaire.spwisland.host.IslandPlaybackExtension
 import io.github.univers629.spwtagworkbench.data.Repo
+import io.github.univers629.spwtagworkbench.EmbeddedWorkbenchRuntime
 
 /**
  * Single host-facing extension. Each upstream module still owns its callback implementation;
@@ -19,7 +20,7 @@ class SPWLyricsIslandPlaybackExtension : PlaybackExtensionPoint {
     }
 
     override fun onAfterLoadLyrics(mediaItem: PlaybackExtensionPoint.MediaItem): String? {
-        if (!Repo.stopped) Repo.postOnMain { Repo.onTrackChanged(mediaItem) }
+        if (EmbeddedWorkbenchRuntime.isStarted && !Repo.stopped) Repo.postOnMain { Repo.onTrackChanged(mediaItem) }
         return lyrics.onAfterLoadLyrics(mediaItem)
     }
 
@@ -29,26 +30,26 @@ class SPWLyricsIslandPlaybackExtension : PlaybackExtensionPoint {
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {
         island.onIsPlayingChanged(isPlaying)
-        if (!Repo.stopped) Repo.postOnMain { Repo.onPlayingChanged(isPlaying) }
+        if (EmbeddedWorkbenchRuntime.isStarted && !Repo.stopped) Repo.postOnMain { Repo.onPlayingChanged(isPlaying) }
     }
 
     override fun onPositionUpdated(position: Long) {
         island.onPositionUpdated(position)
-        if (!Repo.stopped) Repo.postOnMain { Repo.onPosition(position) }
+        if (EmbeddedWorkbenchRuntime.isStarted && !Repo.stopped) Repo.postOnMain { Repo.onPosition(position) }
     }
 
     override fun onSeekTo(position: Long) {
         island.onSeekTo(position)
-        if (!Repo.stopped) Repo.postOnMain { Repo.onPosition(position) }
+        if (EmbeddedWorkbenchRuntime.isStarted && !Repo.stopped) Repo.postOnMain { Repo.onPosition(position) }
     }
 
     override fun onLyricsLineUpdated(lyricsLine: PlaybackExtensionPoint.LyricsLine?) {
         island.onLyricsLineUpdated(lyricsLine)
-        if (!Repo.stopped) Repo.postOnMain { Repo.onLyricLine(lyricsLine) }
+        if (EmbeddedWorkbenchRuntime.isStarted && !Repo.stopped) Repo.postOnMain { Repo.onLyricLine(lyricsLine) }
     }
 
     override fun onLyricsLinesUpdated(lyricsLines: List<PlaybackExtensionPoint.LyricsLine>) {
         island.onLyricsLinesUpdated(lyricsLines)
-        if (!Repo.stopped) Repo.postOnMain { Repo.onLyricLines(lyricsLines) }
+        if (EmbeddedWorkbenchRuntime.isStarted && !Repo.stopped) Repo.postOnMain { Repo.onLyricLines(lyricsLines) }
     }
 }
