@@ -1,5 +1,5 @@
 param(
-    [string]$IslandRef = "main",
+    [string]$IslandRef = "feat/startup-presentation-recovery-gpu",
     [string]$LyricsRef = "feat/combined-workbench-entry",
     [string]$TagWorkbenchRef = "feat/embedded-workbench",
     [string]$MediaRuntimeRef = "main"

@@ -59,6 +59,7 @@ modules/tag-workbench/src/main/resources/preference_config.json
 - 根项目只打包一套 Compose、Skiko、JNA、Jaudiotagger 和字体资源，各模块不会各自携带副本。
 - Lyrics 只暴露 `LyricsWorkspacePageProvider` 通用注册点；Combined 注入 Tag Workbench UI，Lyrics 不直接引用 Tag Workbench 类。
 - Tag Workbench 不再安装侧栏、FAB、AppNavigation 替换或第二个播放 Extension。
+- 词岛启动后使用原生窗口诊断做一次显示自检；必要时先重建置顶状态，再内部重建显示层，不写回用户设置。
 - `lib/kotlin-stdlib-*.jar` 由 SPW 宿主提供，打包时明确排除。
 - 手动搜索和批量处理窗口在第一次打开时才加载 Compose/Skiko；不用这些窗口时不会初始化额外渲染上下文。
 - 宿主只注册一个播放 Extension。词岛继续接收全部播放事件；Tag Workbench 通过可回放的状态桥接收最新快照；Lyrics 只在歌词加载链路中参与。

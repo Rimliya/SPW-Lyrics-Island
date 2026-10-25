@@ -20,6 +20,7 @@ Release 只提供一个运行包：`spw-lyrics-island-<版本>.spmod`。不要�
 ## 功能
 
 - 灵动词岛：逐字高亮、翻译、长音强调、胶囊 / 刘海外观、封面取色、实时频谱、鼠标穿透和全屏隐藏。
+- 启动显示自检：若 Windows 未把词岛置于顶层，先执行一次原生置顶复位；仍未恢复时自动在内部重建显示层，不改写“显示词岛”设置。
 - OBS Spout2：默认开启的独立透明输出，默认 30 FPS、1280×512，可在 30 / 60 FPS 间切换；低性能模式约 15 FPS。
 - 默认字体：内置苹方，仍可切换内置 MiSans 或系统字体。
 - SPW Lyrics：支持 AMLL TTML、QQ 音乐、汽水音乐、酷狗音乐、网易云音乐、Apple Music、LrcShare，并从 MusicBrainz 获取元数据；可选择类型优先或来源优先。
@@ -50,7 +51,7 @@ Lyrics 模块只暴露通用的工作台页面注册点，Tag Workbench 的实�
 
 | 模块 | 来源 | 记录版本 | 提交 |
 | --- | --- | --- | --- |
-| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.3.0-GPU` + upstream `1.2.1` | `653d2e2` |
+| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.3.0-GPU` + upstream `1.2.1` + 启动显示恢复 | `dcfff26` |
 | `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `3.1.0-f.1` + Combined 页面注册 | `3a84c97` |
 | `modules/tag-workbench` | [Rimliya/SPW-Tag-Workbench](https://github.com/Rimliya/SPW-Tag-Workbench) | `embedded-workbench`（上游 1.3.3） | `c5cccbc` |
 | `modules/media-runtime` | [GaBoron/SPW-Media-Runtime](https://github.com/GaBoron/SPW-Media-Runtime) | `0.2.0` | `ad63eed` |
