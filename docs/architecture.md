@@ -8,7 +8,7 @@
 | `modules/lyrics` | SPW Lyrics 上游快照，包含来源搜索、匹配、缓存、手动搜索和批量处理 |
 | `modules/tag-workbench` | SPW Tag Workbench 嵌入式分支，包含标签、封面、艺术家图、频谱、打轴与 ReplayGain |
 | `modules/media-runtime` | SPW Media Runtime 快照，包含媒体处理、播放器、频谱、WebView2 和原生资源 |
-| `modules/combined` | 只包含合并生命周期和播放扩展适配器 |
+| `modules/combined` | 合并生命周期、通用页面适配、播放状态桥接与单一播放 Extension |
 | `src/main/resources` | 单一插件清单、源码链接和构建时生成的合并设置页 |
 | `scripts` | 上游同步与 `.spmod` 校验 |
 | `.github/workflows` | Windows 构建、artifact 和 tag 发布 |
@@ -22,10 +22,11 @@
 1. 启动词岛运行时；
 2. 启动内置 `MediaRuntimePlugin`，注册 JVM-local Runtime endpoint；
 3. 启动 Tag Workbench 的嵌入式运行时，不注册独立插件或宿主 Hook；
-4. 向 Lyrics 的通用页面注册点注入工作台 UI；
-5. 安装 `PluginRuntime`（SPW Lyrics）；
-6. 任一步失败时按逆序回滚已启动的部分；
-7. 停止时先解除页面注册，再关闭歌词、Tag Workbench、Runtime 和词岛运行时。
+4. 启动 Tag 播放桥并回放启动期间收到的最新宿主状态；
+5. 向 Lyrics 的通用页面注册点注入工作台 UI；
+6. 安装 `PluginRuntime`（SPW Lyrics）；
+7. 任一步失败时按逆序回滚已启动的部分；
+8. 停止时先解除页面注册，再关闭歌词、Tag Workbench、Runtime 和词岛运行时。
 
 ## 播放回调
 
@@ -33,9 +34,9 @@
 
 - `IslandPlaybackExtension`：播放时间线、歌词行和状态；
 - `SpwLyricsExtension`：本地歌词缺失检查与歌词替换；
-- Tag Workbench 的 `Repo`：曲目、播放状态、位置与歌词行，并由其自身轮询作为兜底。
+- Tag Workbench 的 `Repo`：经 `TagPlaybackBridge` 转发曲目、播放状态、位置与歌词行；工作台尚未启动时只缓存最新状态，就绪后一次性回放。
 
-这样既不依赖宿主对多个 Extension 的加载顺序，也不需要把两边的业务代码交叉引用。
+这样既不依赖宿主对多个 Extension 的加载顺序，也不需要把各模块的业务代码交叉引用。
 
 ## 资源合并
 
@@ -52,6 +53,7 @@ modules/tag-workbench/src/main/resources/preference_config.json
 ## 依赖
 
 `modules/media-runtime` 通过 included build 参与编译。根项目把 Runtime 的 JVM 组件放入 `lib/`，把 Windows 原生组件放入 `classes/native/windows-x64/`，最终只打一个 `.spmod`。Kotlin、Workshop API 和 PF4J 仍由 SPW 宿主提供，不随包重复分发。
+
 ## 占用与回调优化
 
 - 根项目只打包一套 Compose、Skiko、JNA、Jaudiotagger 和字体资源，各模块不会各自携带副本。
@@ -59,5 +61,5 @@ modules/tag-workbench/src/main/resources/preference_config.json
 - Tag Workbench 不再安装侧栏、FAB、AppNavigation 替换或第二个播放 Extension。
 - `lib/kotlin-stdlib-*.jar` 由 SPW 宿主提供，打包时明确排除。
 - 手动搜索和批量处理窗口在第一次打开时才加载 Compose/Skiko；不用这些窗口时不会初始化额外渲染上下文。
-- 宿主只注册一个播放 Extension。每秒位置回调只转发给词岛；歌词加载回调按需同时转发给两个模块。
+- 宿主只注册一个播放 Extension。词岛继续接收全部播放事件；Tag Workbench 通过可回放的状态桥接收最新快照；Lyrics 只在歌词加载链路中参与。
 - `combinedChecks` 在不启动 SPW 的情况下验证合并设置、Extension 注册、各回调代理、Tag Workbench 资源与页面注册；`verify-spmod.ps1` 再检查重复库名和 Kotlin 标准库泄漏。
