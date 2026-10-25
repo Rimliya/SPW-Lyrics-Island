@@ -58,6 +58,7 @@ fun main() {
     }
     checkEmbeddedRuntime()
 
+    TagPlaybackBridge.stop()
     val extension = SPWLyricsIslandPlaybackExtension()
     val item = PlaybackExtensionPoint.MediaItem(
         title = "Adapter check",
@@ -77,6 +78,7 @@ fun main() {
     extension.onLyricsLineUpdated(
         PlaybackExtensionPoint.LyricsLine(0, 1_000, emptyList(), "adapter check", null),
     )
+    TagPlaybackBridge.stop()
     println("PASS: merged preferences, extension registration, and both playback delegates")
 }
 

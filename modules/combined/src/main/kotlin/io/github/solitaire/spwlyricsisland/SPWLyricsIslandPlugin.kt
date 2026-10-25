@@ -43,12 +43,14 @@ class SPWLyricsIslandPlugin(context: PluginContext) : IslandPlugin(context) {
                 spwVersion = pluginContext.spwVersion,
                 pluginPath = pluginContext.pluginPath,
             )
+            TagPlaybackBridge.start()
             LyricsWorkspacePageRegistry.setWorkbench(EmbeddedTagWorkbenchPage)
             PluginRuntime.install(pluginContext.pluginId, pluginContext.spwChannel)
         } catch (error: Throwable) {
             LyricsWorkspacePageRegistry.setWorkbench(null)
             runCatching { PluginRuntime.close() }
             runCatching { EmbeddedWorkbenchRuntime.stop() }
+            TagPlaybackBridge.stop()
             runCatching { mediaRuntime?.stop() }
             mediaRuntime = null
             super.stop()
@@ -62,6 +64,7 @@ class SPWLyricsIslandPlugin(context: PluginContext) : IslandPlugin(context) {
             PluginRuntime.close()
         } finally {
             runCatching { EmbeddedWorkbenchRuntime.stop() }
+            TagPlaybackBridge.stop()
             runCatching { mediaRuntime?.stop() }
             mediaRuntime = null
             super.stop()
