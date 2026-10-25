@@ -289,7 +289,7 @@ spmod {
     PluginId = "io.github.solitaire.spwlyricsisland"
     PluginName = "SPW Lyrics Island"
     PluginVersion = project.version.toString()
-    PluginProvider = "solitaire + 大肥鱼（感谢原作者 GaBoron）"
+    PluginProvider = "solitaire + 大肥鱼（感谢原作者 GaBoron、univers629 / salt-workshop contributors）"
     PluginDescription = "Lyrics island, multi-source lyrics, music tag workbench and embedded SPW Media Runtime for Salt Player for Windows; Windows x64 with OBS Spout2 output."
     PluginHasConfig = true
     PluginOpenSourceUrl = projectUrl.get()

@@ -2,7 +2,7 @@
 
 将 **灵动词岛**、**SPW Lyrics**、**SPW Tag Workbench** 与 **SPW Media Runtime** 合并为一个 `.spmod`：顶部歌词入口统一打开标签工作台与歌词工具，词岛负责显示，SPW Lyrics 负责多来源歌词搜索与批量处理，Tag Workbench 负责标签、封面、艺术家图与 ReplayGain，Media Runtime 提供频谱打轴所需的音频处理能力。
 
-> 插件作者：`solitaire + 大肥鱼`。本项目是基于多个上游模块的合并发行版，Windows x64 专用，保留 OBS Spout2 透明输出。感谢原作者 GaBoron。
+> 插件作者：`solitaire + 大肥鱼`。本项目是基于多个上游模块的合并发行版，Windows x64 专用，保留 OBS Spout2 透明输出。感谢原作者 GaBoron，以及 Tag Workbench 的 univers629 / salt-workshop contributors。
 > 当前 `gpu-experimental` 分支使用 GPU 实验版词岛模块（Spout2 直接复用 Skia GPU 帧），其余组合逻辑与 `main` 相同。
 
 <p align="center">
