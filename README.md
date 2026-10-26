@@ -13,7 +13,7 @@
 
 ## 一个安装包
 
-Release 只提供一个运行包：`spw-lyrics-island-<版本>.spmod`。不要同时安装原来的词岛、歌词、标签工作台或 Media Runtime 插件，否则可能重复注册播放扩展或 Runtime endpoint。
+Release 提供一个运行包：`spw-lyrics-island-<版本>.spmod`；完整源码 ZIP 作为独立 Release 附件提供，不再内嵌进运行时包。不要同时安装原来的词岛、歌词、标签工作台或 Media Runtime 插件，否则可能重复注册播放扩展或 Runtime endpoint。
 
 安装要求：SPW 1.19.0 或更高版本、Workshop API dev23、Java 25。下载后直接导入 SPW 的创意工坊 / 插件管理，不要解压。
 
@@ -51,7 +51,7 @@ Lyrics 模块只暴露通用的工作台页面注册点，Tag Workbench 的实�
 
 | 模块 | 来源 | 记录版本 | 提交 |
 | --- | --- | --- | --- |
-| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.3.0-GPU` + upstream `1.2.1` + 启动显示恢复 | `3422833` |
+| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.3.0-GPU` + upstream `1.2.1` + 启动显示恢复 + PingFang-only | `ea2d508` |
 | `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `3.1.0-f.1` + Combined 页面注册 | `3a84c97` |
 | `modules/tag-workbench` | [Rimliya/SPW-Tag-Workbench](https://github.com/Rimliya/SPW-Tag-Workbench) | `embedded-workbench`（上游 1.3.3） | `c5cccbc` |
 | `modules/media-runtime` | [GaBoron/SPW-Media-Runtime](https://github.com/GaBoron/SPW-Media-Runtime) | `0.2.0` | `ad63eed` |

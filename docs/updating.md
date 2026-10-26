@@ -9,7 +9,7 @@
 脚本分别执行：
 
 ```powershell
-git subtree pull --prefix modules/island https://github.com/Rimliya/SPW-island.git feat/startup-presentation-recovery-gpu --squash
+git subtree pull --prefix modules/island https://github.com/Rimliya/SPW-island.git feat/font-slimming --squash
 git subtree pull --prefix modules/lyrics https://github.com/Rimliya/SPW-Lyrics.git feat/combined-workbench-entry --squash
 git subtree pull --prefix modules/tag-workbench https://github.com/Rimliya/SPW-Tag-Workbench.git feat/embedded-workbench --squash
 git subtree pull --prefix modules/media-runtime https://github.com/GaBoron/SPW-Media-Runtime.git main --squash

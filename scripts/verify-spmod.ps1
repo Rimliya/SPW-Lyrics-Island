@@ -104,9 +104,6 @@ try {
             throw "Embedded Media Runtime library is missing: $required"
         }
     }
-    if (-not @($entries.Keys | Where-Object { $_ -match "^source/.+\.zip$" }).Count) {
-        throw "Source archive is missing from the package"
-    }
 
     Write-Host "PASS: $Path"
     Write-Host "  version: $version"
