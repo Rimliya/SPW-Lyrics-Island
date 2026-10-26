@@ -162,7 +162,6 @@ tasks.processResources {
     from(mediaRuntimeExtracted.map { it.dir("licenses") }) { into("licenses/media-runtime") }
     from(mediaRuntimeExtracted.map { it.file("LICENSE") }) { into("licenses/media-runtime"); rename { "LICENSE" } }
     from(mediaRuntimeExtracted.map { it.file("NOTICE") }) { into("licenses/media-runtime"); rename { "NOTICE" } }
-    from("modules/island/native/shared-fonts/MiSansVF.ttf") { into("fonts") }
     from("modules/island/native/shared-fonts/PingFang.ttc") { into("fonts") }
     from("modules/tag-workbench/src/main/resources/i18n") { into("i18n") }
     from("modules/tag-workbench/src/main/resources/native") { into("native") }
@@ -352,7 +351,6 @@ tasks.named<Zip>("plugin") {
         }
     }
     into("licenses") { from("licenses") }
-    into("source") { from(tasks.named("sourceArchive")); from(metadataSources) }
     from("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "README.md")
     exclude("**/kotlin-stdlib-*.jar", "**/annotations-*.jar")
 }

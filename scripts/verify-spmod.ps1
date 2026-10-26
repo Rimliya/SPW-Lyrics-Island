@@ -61,9 +61,15 @@ try {
         throw "project.properties does not point at the combined repository"
     }
 
+    if ($entries.ContainsKey("classes/fonts/MiSansVF.ttf")) {
+        throw "Package must not bundle MiSansVF.ttf"
+    }
+    if (@($entries.Keys | Where-Object { $_ -like "source/*" }).Count -gt 0) {
+        throw "Package must not embed the source archive; publish it as a separate release asset"
+    }
+
     $requiredEntries = @(
         "classes/fonts/PingFang.ttc",
-        "classes/fonts/MiSansVF.ttf",
         "classes/native/spw-spectrum.exe",
         "classes/native/spw-island-tray.exe",
         "classes/native/spw-spout.dll",
