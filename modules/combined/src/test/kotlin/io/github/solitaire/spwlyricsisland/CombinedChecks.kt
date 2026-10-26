@@ -1,14 +1,8 @@
 package io.github.solitaire.spwlyricsisland
 
 import com.xuncorp.spw.workshop.api.PlaybackExtensionPoint
-import dev.gaboron.spwmedia.core.NativeAssets
-import dev.gaboron.spwmedia.core.RuntimeEndpoint
-import dev.gaboron.spwmedia.core.RuntimeEngine
-import dev.gaboron.spwmedia.processing.ProcessingProvider
-import dev.gaboron.spwmedia.sdk.MediaRuntime
+import io.github.solitaire.spwlyrics.integration.BassTimingAudioDecoder
 import io.github.solitaire.spwlyrics.integration.workspace.LyricsWorkspacePageRegistry
-import java.nio.file.Files
-import java.nio.file.Path
 
 /** Host-free smoke test for the combined adapter and merged resources. */
 fun main() {
@@ -20,19 +14,13 @@ fun main() {
     }
     check(resource("/META-INF/extensions.idx").trim() ==
         SPWLyricsIslandPlaybackExtension::class.java.name) { "Unexpected extension registration" }
-    check(resourceBytes("/native/windows-x64/ffmpeg.exe").isNotEmpty()) { "Embedded Media Runtime ffmpeg is missing" }
-    check(resource("/native/windows-x64/assets.properties").contains("ffmpeg.path=ffmpeg.exe")) {
-        "Embedded Media Runtime manifest is invalid"
+    check(ResourceAnchor::class.java.getResourceAsStream("/native/windows-x64/ffmpeg.exe") == null) {
+        "Media Runtime ffmpeg leaked into the BASS-only package"
     }
-    checkNotNull(ResourceAnchor::class.java.getResourceAsStream("/licenses/media-runtime/LICENSE")) {
-        "Embedded Media Runtime license is missing"
-    }.close()
-    checkNotNull(Class.forName("dev.gaboron.spwmedia.host.MediaRuntimePlugin")) {
-        "Embedded Media Runtime adapter is missing"
+    check(ResourceAnchor::class.java.getResourceAsStream("/licenses/media-runtime/LICENSE") == null) {
+        "Media Runtime license leaked into the BASS-only package"
     }
-    checkNotNull(Class.forName("dev.gaboron.spwmedia.sdk.MediaRuntime")) {
-        "Embedded Media Runtime SDK is missing"
-    }
+    checkNotNull(BassTimingAudioDecoder::class.java) { "Host-BASS timing decoder is missing" }
     checkNotNull(Class.forName("io.github.univers629.spwtagworkbench.EmbeddedWorkbenchRuntime")) {
         "Embedded Tag Workbench runtime is missing"
     }
@@ -56,7 +44,6 @@ fun main() {
     } finally {
         LyricsWorkspacePageRegistry.setWorkbench(null)
     }
-    checkEmbeddedRuntime()
 
     TagPlaybackBridge.stop()
     val extension = SPWLyricsIslandPlaybackExtension()
@@ -79,28 +66,7 @@ fun main() {
         PlaybackExtensionPoint.LyricsLine(0, 1_000, emptyList(), "adapter check", null),
     )
     TagPlaybackBridge.stop()
-    println("PASS: merged preferences, extension registration, and both playback delegates")
-}
-
-private fun checkEmbeddedRuntime() {
-    val pluginId = "io.github.solitaire.spwlyricsisland"
-    val storage = Files.createTempDirectory("spw-media-runtime-check")
-    val endpoint = RuntimeEndpoint(
-        RuntimeEngine(
-            providers = listOf(ProcessingProvider()),
-            assets = NativeAssets(Path.of("build/resources/main/native"), storage.resolve("assets")),
-            storage = storage,
-            workerCommands = emptyMap(),
-        ),
-    ) { pluginId }
-    try {
-        MediaRuntime.connect(pluginId).use { client ->
-            val processing = client.capabilities().firstOrNull { it.id == "processing" }
-            check(processing?.available == true) { "Embedded Media Runtime processing capability is unavailable" }
-        }
-    } finally {
-        endpoint.close()
-    }
+    println("PASS: merged preferences, BASS decoder, extension registration, and playback delegates")
 }
 
 private fun resource(name: String): String =

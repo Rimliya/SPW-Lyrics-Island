@@ -60,16 +60,14 @@ Copyright (C) 2026 salt-workshop contributors，采用 **GPL-3.0-only**。本项
 | [Skia](https://skia.org/)，Google 与 contributors | Skiko 原生库中的绘制引擎 | BSD-3-Clause；附带 [许可全文](licenses/Skia-LICENSE.txt) |
 | [Kotlin / kotlinx.coroutines](https://github.com/JetBrains/kotlin)，JetBrains | 编译工具、标准库与绘制调度运行库；随包提供 | Apache-2.0；[完整文本](licenses/Apache-2.0.txt) |
 | [PF4J](https://github.com/pf4j/pf4j)，Decebal Suiu | 编译使用 3.12.0，由宿主提供 | Apache-2.0 |
+| [BASS](https://www.un4seen.com/)，Un4seen Developments | Salt Player 宿主初始化并提供；插件只通过 JNA 调用，不随包分发 BASS | 由宿主及其 BASS 许可覆盖 |
 | [Gradle](https://github.com/gradle/gradle)，Gradle contributors | Wrapper 来自 SPW API 0.1.0-dev20，构建使用 9.8.0 | Apache-2.0；Wrapper 自带声明保留，发行包不内嵌 Gradle 发行版 |
-| [SPW Media Runtime](https://github.com/GaBoron/SPW-Media-Runtime)，GaBoron | 0.2.0 源码作为内部模块编译；JVM 组件与 Windows 原生组件直接进入 Combined 包 | Apache-2.0；完整文本与第三方材料位于 `licenses/media-runtime/` |
-| [FFmpeg / FFprobe](https://ffmpeg.org/)，FFmpeg contributors | Runtime 0.2.0 内置 LGPL shared 构建，用于频谱打轴音频解码 | LGPL；许可证与匹配源码归档说明随 `licenses/media-runtime/` 分发 |
-| [libmpv / libplacebo](https://github.com/mpv-player/mpv)，mpv contributors | Runtime 0.2.0 内置 `gpl=false` Windows 构建 | LGPL-2.1-or-later；许可证与源码来源随 Runtime 材料分发 |
 
 运行时所用 Windows 和 Java 由其原供应方提供，遵循各自条款。插件不附带音乐、封面或歌词内容，也不改变这些内容的权利归属。
 
 ## 分发
 
-插件 `.spmod` 内含 LICENSE、NOTICE、本文件、licenses 目录及 source 目录中的对应完整源码压缩包（含构建脚本与 Wrapper）。转发二进制时保留这些材料；修改后重新构建也应提供对应源码，保留署名并说明改动。不得对 CC BY-SA 内容追加限制该许可权利的条款或技术措施。
+插件 `.spmod` 内含 LICENSE、NOTICE、本文件与 licenses 目录；对应完整源码作为独立 ZIP 附件提供（含构建脚本与 Wrapper）。转发二进制时保留这些材料；修改后重新构建也应提供对应源码，保留署名并说明改动。不得对 CC BY-SA 内容追加限制该许可权利的条款或技术措施。
 
 ## SPW Lyrics Island 合并发行版补充
 

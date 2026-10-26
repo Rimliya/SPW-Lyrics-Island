@@ -26,14 +26,3 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "SPW-Lyrics-Island"
-
-includeBuild("modules/media-runtime") {
-    dependencySubstitution {
-        substitute(module("io.github.gaboron.spwmedia:spw-media-spw-adapter"))
-            .using(project(":spw-adapter"))
-        substitute(module("io.github.gaboron.spwmedia:spw-media-runtime-core"))
-            .using(project(":runtime-core"))
-        substitute(module("io.github.gaboron.spwmedia:spw-media-processing"))
-            .using(project(":providers:processing"))
-    }
-}

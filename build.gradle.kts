@@ -1,6 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.gradle.internal.os.OperatingSystem
-import java.net.URI
 
 plugins {
     kotlin("jvm") version "2.4.20"
@@ -60,29 +59,6 @@ val currentOs = OperatingSystem.current()
 val isWindows = currentOs.isWindows
 val metadataSources = configurations.create("metadataSources") { isTransitive = false }
 val skikoVersion = "0.150.2"
-val mediaRuntimeVersion = "0.2.0"
-val mediaRuntimeArchive = layout.buildDirectory.file("media-runtime/spw-media-runtime-$mediaRuntimeVersion.spmod")
-val mediaRuntimeExtracted = layout.buildDirectory.dir("media-runtime/extracted")
-
-val downloadMediaRuntime = tasks.register("downloadMediaRuntime") {
-    outputs.file(mediaRuntimeArchive)
-    doLast {
-        val target = mediaRuntimeArchive.get().asFile
-        if (!target.isFile) {
-            target.parentFile.mkdirs()
-            val uri = URI.create("https://github.com/GaBoron/SPW-Media-Runtime/releases/download/v$mediaRuntimeVersion/spw-media-runtime-$mediaRuntimeVersion.spmod")
-            uri.toURL().openStream().use { input -> target.outputStream().use(input::copyTo) }
-        }
-    }
-}
-
-val extractMediaRuntime = tasks.register<Sync>("extractMediaRuntime") {
-    dependsOn(downloadMediaRuntime)
-    from({ zipTree(mediaRuntimeArchive.get().asFile) }) {
-        include("native/windows-x64/**", "licenses/**", "LICENSE", "NOTICE")
-    }
-    into(mediaRuntimeExtracted)
-}
 
 dependencies {
     compileOnly(kotlin("stdlib"))
@@ -95,8 +71,6 @@ dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-    implementation("io.github.gaboron.spwmedia:spw-media-spw-adapter:0.2.0")
-    implementation("io.github.gaboron.spwmedia:spw-media-sdk:0.2.0")
     implementation("com.github.houbb:opencc4j:1.14.0")
     implementation("io.github.moriafly:salt-ui:3.0.0-beta03")
     compileOnly("org.jetbrains.compose.desktop:desktop:1.12.2")
@@ -110,8 +84,6 @@ dependencies {
     testImplementation("org.jetbrains.compose.desktop:desktop:1.12.2")
     testImplementation("net.java.dev.jna:jna:5.17.0")
     testImplementation("net.java.dev.jna:jna-platform:5.17.0")
-    testImplementation("io.github.gaboron.spwmedia:spw-media-runtime-core:0.2.0")
-    testImplementation("io.github.gaboron.spwmedia:spw-media-processing:0.2.0")
 }
 
 configurations.runtimeClasspath {
@@ -155,13 +127,9 @@ val mergePreferences = tasks.register("mergePreferences") {
 }
 
 tasks.processResources {
-    dependsOn(mergePreferences, extractMediaRuntime)
+    dependsOn(mergePreferences)
     doFirst { check(isWindows) { "Build the Windows-only plugin on Windows with the native toolchains installed" } }
     from(mergedPreferenceConfig)
-    from(mediaRuntimeExtracted.map { it.dir("native") }) { into("native") }
-    from(mediaRuntimeExtracted.map { it.dir("licenses") }) { into("licenses/media-runtime") }
-    from(mediaRuntimeExtracted.map { it.file("LICENSE") }) { into("licenses/media-runtime"); rename { "LICENSE" } }
-    from(mediaRuntimeExtracted.map { it.file("NOTICE") }) { into("licenses/media-runtime"); rename { "NOTICE" } }
     from("modules/island/native/shared-fonts/PingFang.ttc") { into("fonts") }
     from("modules/tag-workbench/src/main/resources/i18n") { into("i18n") }
     from("modules/tag-workbench/src/main/resources/native") { into("native") }
@@ -196,6 +164,14 @@ tasks.test {
     failOnNoDiscoveredTests = false
 }
 
+tasks.register<JavaExec>("bassSmoke") {
+    dependsOn("compileTestKotlin")
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("io.github.solitaire.spwlyricsisland.BassTimingSmokeKt")
+    val bassDir = providers.gradleProperty("bassDir").orNull ?: error("Set -PbassDir=<directory containing bass.dll>")
+    val audioFiles = providers.gradleProperty("audioFiles").orNull ?: error("Set -PaudioFiles=<file|file|...>")
+    args(listOf(bassDir) + audioFiles.split('|'))
+}
 tasks.register<JavaExec>("combinedChecks") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
@@ -289,7 +265,7 @@ spmod {
     PluginName = "SPW Lyrics Island"
     PluginVersion = project.version.toString()
     PluginProvider = "solitaire + 大肥鱼（感谢原作者 GaBoron、univers629 / salt-workshop contributors）"
-    PluginDescription = "Lyrics island, multi-source lyrics, music tag workbench and embedded SPW Media Runtime for Salt Player for Windows; Windows x64 with OBS Spout2 output."
+    PluginDescription = "Lyrics island, multi-source lyrics, music tag workbench and host-BASS timing analysis for Salt Player for Windows; Windows x64 with OBS Spout2 output."
     PluginHasConfig = true
     PluginOpenSourceUrl = projectUrl.get()
     PluginPermissions = listOf(
@@ -311,10 +287,6 @@ tasks.register<Zip>("sourceArchive") {
     }
     from("modules/lyrics") {
         into("modules/lyrics")
-        exclude("**/build/**", "**/.gradle/**", "**/.kotlin/**", "**/__pycache__/**", "**/*.pyc")
-    }
-    from("modules/media-runtime") {
-        into("modules/media-runtime")
         exclude("**/build/**", "**/.gradle/**", "**/.kotlin/**", "**/__pycache__/**", "**/*.pyc")
     }
     from("modules/tag-workbench") {

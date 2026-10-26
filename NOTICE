@@ -106,15 +106,3 @@ The combined work integrates the GPL-3.0-only island program with the MIT-licens
 lyrics module. The combined distribution is provided under GPL-3.0-only while the
 SPW Lyrics module and its original files remain available under MIT.
 No upstream copyright, attribution, or license notice is removed by this combination.
-
-SPW Media Runtime
-Copyright (C) 2026 GaBoron
-https://github.com/GaBoron/SPW-Media-Runtime
-Version 0.2.0 is embedded directly in this Combined plugin under the Apache
-License, Version 2.0 (licenses/media-runtime/LICENSE).
-FFmpeg, FFprobe, libmpv/libplacebo, WebView2 Loader, JNA, jaudiotagger,
-kotlinx.serialization, nlohmann/json, fonts, compiler runtimes and the other
-components redistributed with the runtime retain their own licenses. Their
-notices and license texts are included under licenses/media-runtime/.
-The matching native source and build-information archive is published with the
-upstream Runtime release and is referenced by modules/media-runtime/third-party.

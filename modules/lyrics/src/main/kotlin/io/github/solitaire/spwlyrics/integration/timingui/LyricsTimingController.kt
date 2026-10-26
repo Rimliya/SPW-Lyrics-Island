@@ -19,7 +19,7 @@ internal class LyricsTimingController(private val editor: MetadataEditorControll
 ) : AutoCloseable {
     val calibration = TimingCalibrationController(calibrationStore, createBeatAudio)
     val spectrum = TimingSpectrumController(decoder ?: object : TimingAudioDecoder {
-        override fun decode(path: java.nio.file.Path, startMs: Long, durationMs: Long, cancelled: () -> Boolean): TimingPcm = error("频谱编辑需要同时安装并启用 SPW Media Runtime。")
+        override fun decode(path: java.nio.file.Path, startMs: Long, durationMs: Long, cancelled: () -> Boolean): TimingPcm = error("频谱编辑需要 Salt Player 的宿主 BASS 可用，请先播放任意歌曲后重试。")
         override fun cancel() {}
     })
     val audioPath get() = editor.state.loaded?.path

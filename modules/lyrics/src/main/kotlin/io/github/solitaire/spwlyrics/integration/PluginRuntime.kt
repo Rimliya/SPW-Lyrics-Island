@@ -46,7 +46,6 @@ object PluginRuntime {
     @Volatile private var precache: LyricsPrecache? = null
     @Volatile private var workspace: LyricsWorkspace? = null
     @Volatile private var timingPlayback: SpwTimingPlayback? = null
-    @Volatile private var timingMedia: TimingMediaRuntime? = null
     @Volatile private var hostUi: HostUiIntegration? = null
     @Volatile private var settings: PluginSettings? = null
     @Volatile private var cacheFolderOpener: CacheFolderOpener? = null
@@ -55,10 +54,8 @@ object PluginRuntime {
 
     @Synchronized
     @OptIn(UnstableSpwWorkshopApi::class)
-    fun install(pluginId: String, channel: com.xuncorp.spw.workshop.api.Channel) {
+    fun install() {
         if (coordinator != null) return
-        timingMedia?.close()
-        timingMedia = null
         val root = DataDirectory.root
         val cacheDirectory = root.resolve("cache")
         val cache = FileLyricsCache(cacheDirectory)
@@ -157,10 +154,9 @@ object PluginRuntime {
             }
         }
         val timingTransport = SpwTimingPlayback().also { timingPlayback = it }
-        val timingRuntime = TimingMediaRuntime(pluginId).also { timingMedia = it }
         val calibration = FileTimingCalibrationStore(root.resolve("打轴输入校准.properties"))
         workspace = LyricsWorkspace({ LyricsWorkspaceSession(manualOperations, metadataOperations, batch, describeBatchFailure,
-            timingTransport, calibration, SpwTimingAudioDecoder(timingRuntime, TimingRuntimeInstall(channel))) }, ::toastWarning)
+            timingTransport, calibration, BassTimingAudioDecoder()) }, ::toastWarning)
         hostUi = HostUiIntegration(checkNotNull(workspace), ::toastWarning).also { it.start() }
     }
 
@@ -227,8 +223,6 @@ object PluginRuntime {
         hostUi = null
         workspace?.close()
         workspace = null
-        val mediaCleanup = runCatching { timingMedia?.close() }
-        if (mediaCleanup.isSuccess) timingMedia = null
         timingPlayback = null
         cacheFolderOpener = null
         settings?.close()
@@ -240,7 +234,6 @@ object PluginRuntime {
         coordinator?.close()
         coordinator = null
         libraryTracks.clear()
-        mediaCleanup.getOrThrow()
     }
 
     private fun load(

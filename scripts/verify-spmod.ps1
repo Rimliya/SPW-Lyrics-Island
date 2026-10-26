@@ -75,17 +75,12 @@ try {
         "classes/native/spw-spout.dll",
         "classes/native/spw-island-glass.dll",
         "classes/native/compose/skiko-windows-x64.dll",
-        "classes/native/windows-x64/assets.properties",
-        "classes/native/windows-x64/ffmpeg.exe",
-        "classes/native/windows-x64/ffprobe.exe",
-        "classes/native/windows-x64/spw-jvm-worker.exe",
-        "classes/native/windows-x64/spw-platform.exe",
-        "classes/licenses/media-runtime/LICENSE",
         "classes/licenses/tag-workbench/LICENSE",
         "classes/licenses/tag-workbench/THIRD_PARTY_NOTICES.md",
         "classes/licenses/tag-workbench/libebur128-COPYING.txt",
         "classes/native/win-x64/ebur128.dll",
-        "classes/i18n/strings-zh.properties"
+        "classes/i18n/strings-zh.properties",
+        "classes/io/github/solitaire/spwlyrics/integration/BassTimingAudioDecoder.class"
     )
     foreach ($required in $requiredEntries) {
         if (-not $entries.ContainsKey($required)) { throw "Missing package entry: $required" }
@@ -99,12 +94,24 @@ try {
         Group-Object | Where-Object Count -gt 1)
     if ($duplicateLibraries.Count) { throw "Duplicate library file names: $($duplicateLibraries.Name -join ', ')" }
     if ($libraries.Count -eq 0) { throw "No runtime libraries were packaged" }
-    foreach ($required in @("spw-media-spw-adapter-", "spw-media-sdk-", "spw-media-runtime-core-", "spw-media-native-worker-")) {
-        if (-not @($libraries | Where-Object { (Split-Path $_ -Leaf).StartsWith($required) }).Count) {
-            throw "Embedded Media Runtime library is missing: $required"
+
+    $forbiddenEntries = @(
+        "classes/native/windows-x64/assets.properties",
+        "classes/native/windows-x64/ffmpeg.exe",
+        "classes/native/windows-x64/ffprobe.exe",
+        "classes/native/windows-x64/spw-jvm-worker.exe",
+        "classes/native/windows-x64/spw-platform.exe",
+        "classes/licenses/media-runtime/LICENSE"
+    )
+    foreach ($forbidden in $forbiddenEntries) {
+        if ($entries.ContainsKey($forbidden)) { throw "BASS-only package must not contain: $forbidden" }
+    }
+    foreach ($library in $libraries) {
+        $name = Split-Path $library -Leaf
+        if ($name -match "^spw-media-(spw-adapter|sdk|runtime-core|native-worker)-") {
+            throw "BASS-only package must not contain Media Runtime library: $name"
         }
     }
-
     Write-Host "PASS: $Path"
     Write-Host "  version: $version"
     Write-Host "  settings: $($configNames -join ', ')"

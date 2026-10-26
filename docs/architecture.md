@@ -7,7 +7,6 @@
 | `modules/island` | 灵动词岛上游快照，包含窗口、绘制、Spout2、原生组件与设置 |
 | `modules/lyrics` | SPW Lyrics 上游快照，包含来源搜索、匹配、缓存、手动搜索和批量处理 |
 | `modules/tag-workbench` | SPW Tag Workbench 嵌入式分支，包含标签、封面、艺术家图、频谱、打轴与 ReplayGain |
-| `modules/media-runtime` | SPW Media Runtime 快照，包含媒体处理、播放器、频谱、WebView2 和原生资源 |
 | `modules/combined` | 合并生命周期、通用页面适配、播放状态桥接与单一播放 Extension |
 | `src/main/resources` | 单一插件清单、源码链接和构建时生成的合并设置页 |
 | `scripts` | 上游同步与 `.spmod` 校验 |
@@ -52,7 +51,7 @@ modules/tag-workbench/src/main/resources/preference_config.json
 
 ## 依赖
 
-`modules/media-runtime` 通过 included build 参与编译。根项目把 Runtime 的 JVM 组件放入 `lib/`，把 Windows 原生组件放入 `classes/native/windows-x64/`，最终只打一个 `.spmod`。Kotlin、Workshop API 和 PF4J 仍由 SPW 宿主提供，不随包重复分发。
+打轴频谱直接复用 SPW 宿主已经初始化的 BASS：插件只创建短期 decode stream，不初始化、不关闭宿主引擎，也不打包 FFmpeg/Media Runtime。最终只打一个 `.spmod`。Kotlin、Workshop API、JNA 和 PF4J 仍由 SPW 宿主提供，不随包重复分发。
 
 ## 占用与回调优化
 

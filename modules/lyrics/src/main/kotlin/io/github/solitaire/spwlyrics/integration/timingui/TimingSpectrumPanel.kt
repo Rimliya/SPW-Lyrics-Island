@@ -66,7 +66,7 @@ internal fun TimingSpectrumPanel(timing: LyricsTimingController, followPlayback:
                         { browsing = true; controller.panBy(it) }, Modifier.fillMaxSize())
                 } else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     LyricsTransition(controller.loading to controller.error) { (loading, error) ->
-                        LyricsStatus(if (loading) "正在通过 Runtime 解码并分析当前时间窗…" else error ?: "打开歌曲后分析频谱。", error != null)
+                        LyricsStatus(if (loading) "正在通过宿主 BASS 解码并分析当前时间窗…" else error ?: "打开歌曲后分析频谱。", error != null)
                     }
                 }
             }

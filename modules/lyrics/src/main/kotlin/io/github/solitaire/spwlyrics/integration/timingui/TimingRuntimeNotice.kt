@@ -25,7 +25,7 @@ internal fun TimingRuntimeNotice(dependency: TimingAudioDependency) {
     var error by remember(dependency.installUrl) { mutableStateOf<String?>(null) }
     AnimatedVisibility(!dependency.available, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
         Column {
-            JustifiedRow(startContent = { LyricsStatus("频谱需要安装并启用 SPW Media Runtime") }, endContent = {
+            JustifiedRow(startContent = { LyricsStatus("频谱需要 Salt Player 的宿主 BASS，请先播放任意歌曲后重试") }, endContent = {
                 if (dependency.installUrl.isNotBlank()) DesktopButton(dependency.installLabel, {
                     if (!opening) scope.launch {
                         opening = true
