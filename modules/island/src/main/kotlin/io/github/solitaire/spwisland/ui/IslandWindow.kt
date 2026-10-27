@@ -256,6 +256,7 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
                 buffersReleased = true
             }
             surface.hoverPose = IslandHoverMotion.Pose.HIDDEN
+            surface.clearGpuFrame()
             // Keep a paused reveal at zero so playback resumes through the same motion.
             // Other policies retain their immediate native hide/show behavior.
             hoverVisibility.update(false, null, Rectangle(), dt, true, settings.notch, show = !paused)
@@ -401,8 +402,10 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
             catch (error: Exception) {
                 IslandLog.failure("IslandWindow", "caught.error", error); nativeAvailable = false; report(error) }
         }
-        if (renderer.active) renderer.draw()
-        else if (Platform.isLinux()) {
+        if (renderer.active) {
+            surface.publishGpuFrame(panel.gpuFrame(surface.hoverPose, panel.x, panel.y))
+            renderer.draw()
+        } else if (Platform.isLinux()) {
             // The isolated Linux JVM uses XRender, and publishes one complete buffered frame.
             // Never clear the on-screen drawable or reshape it during layout animation.
             window.graphics?.let { graphics ->
@@ -451,7 +454,10 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
                 native.forceTopmost(window)
                 nextTopmostCheck = 0
                 surface.repaint()
-                if (renderer.active) renderer.draw()
+                if (renderer.active) {
+                    surface.publishGpuFrame(panel.gpuFrame(surface.hoverPose, panel.x, panel.y))
+                    renderer.draw()
+                }
             } catch (error: Exception) {
                 IslandLog.failure("window", "presentation_recovery.topmost_failed", error)
                 stage = "rebuild"
@@ -478,6 +484,7 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
         canvasHeight = 0
         buffersReleased = true
         surface.hoverPose = IslandHoverMotion.Pose.HIDDEN
+        surface.clearGpuFrame()
         hoverActive = false
         clickThroughApplied = null
         nextScreenCheck = 0

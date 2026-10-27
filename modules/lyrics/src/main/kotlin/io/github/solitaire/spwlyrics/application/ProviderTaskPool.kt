@@ -118,7 +118,7 @@ internal class ProviderTaskPool(
     private data class TaskOutcome<T>(val index: Int, val value: T?)
 
     private companion object {
-        const val DEFAULT_PARALLELISM = 15
+        const val DEFAULT_PARALLELISM = 4
         val THREAD_NUMBER = AtomicInteger()
     }
 }

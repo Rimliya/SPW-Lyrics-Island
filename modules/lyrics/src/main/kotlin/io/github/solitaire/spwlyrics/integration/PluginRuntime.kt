@@ -28,6 +28,7 @@ import io.github.solitaire.spwlyrics.provider.AppleMusicProvider
 import io.github.solitaire.spwlyrics.provider.LrcShareProvider
 import io.github.solitaire.spwlyrics.provider.MusicBrainzProvider
 import io.github.solitaire.spwlyrics.storage.DataDirectory
+import io.github.solitaire.spwlyrics.storage.DEFAULT_LYRICS_CACHE_BYTES
 import io.github.solitaire.spwlyrics.storage.FileLyricsCache
 import io.github.solitaire.spwlyrics.integration.manualui.ManualSearchOperations
 import io.github.solitaire.spwlyrics.integration.metadataui.MetadataEditorOperations
@@ -39,6 +40,10 @@ import io.github.solitaire.spwlyrics.integration.hostui.HostUiIntegration
 import io.github.solitaire.spwlyrics.storage.FileLyricsDelaySettings
 import io.github.solitaire.spwlyrics.storage.FileTimingCalibrationStore
 import java.time.Duration
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 object PluginRuntime {
     @Volatile private var coordinator: LyricsLoadCoordinator? = null
@@ -49,6 +54,10 @@ object PluginRuntime {
     @Volatile private var hostUi: HostUiIntegration? = null
     @Volatile private var settings: PluginSettings? = null
     @Volatile private var cacheFolderOpener: CacheFolderOpener? = null
+    @Volatile private var lyricsCache: FileLyricsCache? = null
+    @Volatile private var amllProvider: AmllProvider? = null
+    @Volatile private var maintenanceExecutor: ScheduledExecutorService? = null
+    @Volatile private var maintenanceTask: ScheduledFuture<*>? = null
     private val libraryTracks = SpwLibraryTrackSource()
     private val localTtmlLyrics = LocalTtmlLyricsLoader()
 
@@ -59,6 +68,7 @@ object PluginRuntime {
         val root = DataDirectory.root
         val cacheDirectory = root.resolve("cache")
         val cache = FileLyricsCache(cacheDirectory)
+        lyricsCache = cache
         val delays = FileLyricsDelaySettings(root.resolve("歌词延迟"))
         cacheFolderOpener = CacheFolderOpener(cacheDirectory)
         settings = PluginSettings(WorkshopApi.manager.createConfigManager(), {
@@ -66,12 +76,13 @@ object PluginRuntime {
             coordinator?.currentQuery()?.let { precache?.trackChanged(it, force = true) }
         }, ::toastWarning)
         val http = ProviderHttpClient()
+        val amll = AmllProvider(
+            cacheDirectory.resolve("AMLL 索引"),
+            ProviderHttpClient(requestTimeout = Duration.ofSeconds(6)),
+            legacyIndexPath = root.resolve("amll").resolve("amll-index.jsonl"),
+        ).also { amllProvider = it }
         val providers = listOf(
-            AmllProvider(
-                cacheDirectory.resolve("AMLL 索引"),
-                ProviderHttpClient(requestTimeout = Duration.ofSeconds(6)),
-                legacyIndexPath = root.resolve("amll").resolve("amll-index.jsonl"),
-            ),
+            amll,
             QqMusicProvider(http),
             KugouMusicProvider(http),
             NeteaseMusicProvider(http),
@@ -158,6 +169,7 @@ object PluginRuntime {
         workspace = LyricsWorkspace({ LyricsWorkspaceSession(manualOperations, metadataOperations, batch, describeBatchFailure,
             timingTransport, calibration, BassTimingAudioDecoder()) }, ::toastWarning)
         hostUi = HostUiIntegration(checkNotNull(workspace), ::toastWarning).also { it.start() }
+        startCacheMaintenance()
     }
 
     fun beforeLoad(mediaItem: PlaybackExtensionPoint.MediaItem): String? =
@@ -191,6 +203,58 @@ object PluginRuntime {
     fun openCacheFolder() {
         if (cacheFolderOpener?.open() != true) toastWarning("无法打开 SPW Lyrics 本地缓存文件夹。")
     }
+
+    fun clearLyricsCache() {
+        val cache = lyricsCache
+        val executor = maintenanceExecutor
+        if (cache == null || executor == null) {
+            toastWarning("歌词缓存尚未初始化。")
+            return
+        }
+        executor.execute {
+            val result = runCatching { cache.clearCachedLyrics() }
+            result.onSuccess { cleaned ->
+                toastWarning("已清理歌词缓存：${cleaned.deletedFiles} 个文件，释放 ${formatBytes(cleaned.removedBytes)}。")
+            }.onFailure {
+                toastWarning("清理歌词缓存失败：${it.message ?: "未知错误"}")
+            }
+        }
+    }
+
+    fun clearAmllIndex() {
+        val provider = amllProvider
+        val executor = maintenanceExecutor
+        if (provider == null || executor == null) {
+            toastWarning("AMLL 索引尚未初始化。")
+            return
+        }
+        executor.execute {
+            val removed = runCatching { provider.clearIndex() }.getOrDefault(false)
+            toastWarning(if (removed) "已清理 AMLL 索引，下次搜索时会重新获取。" else "AMLL 索引已为空或清理失败。")
+        }
+    }
+
+    private fun startCacheMaintenance() {
+        maintenanceTask?.cancel(false)
+        maintenanceExecutor?.shutdownNow()
+        val executor = Executors.newSingleThreadScheduledExecutor { task ->
+            Thread(task, "spw-lyrics-cache-maintenance").apply { isDaemon = true }
+        }
+        maintenanceExecutor = executor
+        maintenanceTask = executor.scheduleWithFixedDelay({
+            runCatching {
+                lyricsCache?.prune(LYRICS_CACHE_LIMIT_BYTES, coordinator?.currentQuery())
+                amllProvider?.enforceIndexLimit(AMLL_INDEX_LIMIT_BYTES)
+            }
+        }, 45, 24 * 60, TimeUnit.MINUTES)
+    }
+
+    private fun formatBytes(bytes: Long): String = when {
+        bytes >= 1024L * 1024 -> String.format(java.util.Locale.US, "%.1f MiB", bytes / (1024.0 * 1024.0))
+        bytes >= 1024L -> String.format(java.util.Locale.US, "%.1f KiB", bytes / 1024.0)
+        else -> "$bytes B"
+    }
+
     fun resetLyricsOrder() {
         toastWarning(if (settings?.resetSelection() == true) "已恢复默认歌词排序。关闭并重新打开设置可查看默认顺序。" else "重置未完成，请重新打开设置后重试。")
     }
@@ -219,6 +283,10 @@ object PluginRuntime {
 
     @Synchronized
     fun close() {
+        maintenanceTask?.cancel(false); maintenanceTask = null
+        maintenanceExecutor?.shutdownNow(); maintenanceExecutor = null
+        lyricsCache = null
+        amllProvider = null
         hostUi?.close()
         hostUi = null
         workspace?.close()
@@ -260,4 +328,7 @@ object PluginRuntime {
     private fun toastWarning(message: String) {
         runCatching { WorkshopApi.ui.toast(message, WorkshopApi.Ui.ToastType.Warning) }
     }
+
+    private const val LYRICS_CACHE_LIMIT_BYTES = DEFAULT_LYRICS_CACHE_BYTES
+    private const val AMLL_INDEX_LIMIT_BYTES = 16L * 1024 * 1024
 }

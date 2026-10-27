@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package io.github.solitaire.spwisland.ui
 
+import io.github.solitaire.spwisland.ui.gpu.IslandGpuFrame
 import java.awt.*
 import java.awt.geom.AffineTransform
 import java.awt.geom.Area
+import java.util.concurrent.atomic.AtomicReference
 import javax.swing.JPanel
 
 /** Stable translucent backing surface; animation changes the child silhouette, not the native bitmap. */
@@ -12,7 +14,20 @@ class IslandSurface(val island: IslandPanel) : JPanel(null) {
     @Volatile internal var presentedFrames = 0L
     internal val renderCapacity = Dimension()
     internal var gpuRedraw: (() -> Unit)? = null
+    private val latestGpuFrame = AtomicReference<IslandGpuFrame?>()
+
     init { isOpaque = false; isDoubleBuffered = false; island.isDoubleBuffered = false; add(island) }
+
+    internal fun publishGpuFrame(frame: IslandGpuFrame) {
+        latestGpuFrame.set(frame)
+    }
+
+    internal fun currentGpuFrame(): IslandGpuFrame? = latestGpuFrame.get()
+
+    internal fun clearGpuFrame() {
+        latestGpuFrame.set(null)
+    }
+
     override fun paintChildren(graphics: Graphics) {
         gpuRedraw?.let { it(); return }
         val g = graphics.create() as Graphics2D
@@ -23,6 +38,7 @@ class IslandSurface(val island: IslandPanel) : JPanel(null) {
             presentedFrames++
         } finally { g.dispose() }
     }
+
     override fun paintComponent(graphics: Graphics) {
         if (gpuRedraw != null) return
         val g = graphics.create() as Graphics2D
@@ -31,6 +47,7 @@ class IslandSurface(val island: IslandPanel) : JPanel(null) {
             g.fillRect(0, 0, width, height)
         } finally { g.dispose() }
     }
+
     fun inputRegion(): Shape {
         val shape = IslandGeometry.silhouette(island.width, island.height, island.settings.shape,
             island.settings.cornerRoundness, island.settings.squircle)

@@ -38,7 +38,7 @@ kotlin {
             )
         }
         test {
-            kotlin.srcDirs("modules/island/src/test/kotlin", "modules/combined/src/test/kotlin")
+            kotlin.srcDirs("modules/island/src/test/kotlin", "modules/lyrics/src/test/kotlin", "modules/combined/src/test/kotlin")
         }
     }
 }
@@ -79,6 +79,9 @@ dependencies {
 
     metadataSources("net.jthink:jaudiotagger:3.0.1:sources")
     testImplementation(kotlin("stdlib"))
+    testImplementation(kotlin("test"))
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation(workshop) { isTransitive = false }
     testImplementation("org.pf4j:pf4j:3.12.0")
     testImplementation("org.jetbrains.compose.desktop:desktop:1.12.2")
@@ -160,6 +163,7 @@ tasks.processResources {
 }
 
 tasks.test {
+    useJUnitPlatform()
     // The island verification programs are JavaExec entry points, not JUnit tests.
     failOnNoDiscoveredTests = false
 }

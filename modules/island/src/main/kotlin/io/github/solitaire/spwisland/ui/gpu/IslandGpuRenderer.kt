@@ -68,12 +68,12 @@ internal class IslandGpuRenderer(private val owner: Window, private val surface:
                                 val scale = owner.graphicsConfiguration.defaultTransform
                                 canvas.scoped {
                                     canvas.scale(scale.scaleX.toFloat(), scale.scaleY.toFloat())
-                                    canvas.translate(surface.island.x.toFloat(), surface.island.y.toFloat())
-                                    val frame = surface.island.gpuFrame()
+                                    val frame = surface.currentGpuFrame() ?: return@guard
+                                    canvas.translate(frame.surfaceX.toFloat(), frame.surfaceY.toFloat())
                                     painter.paint(canvas, frame, IslandHoverGeometry.frame(frame.width, frame.height,
                                         frame.settings.shape, frame.settings.cornerRoundness, frame.settings.squircle,
-                                        surface.hoverPose), scale.scaleY,
-                                        backdrop?.sample(surface.island.x, surface.island.y,
+                                        frame.hoverPose), scale.scaleY,
+                                        backdrop?.sample(frame.surfaceX, frame.surfaceY,
                                             scale.scaleX.toFloat(), scale.scaleY.toFloat()), gpu?.context)
                                 }
                                 frames++

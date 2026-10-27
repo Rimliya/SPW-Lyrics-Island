@@ -137,20 +137,21 @@ class IslandPanel(private val actions: PlaybackActions, report: (Throwable) -> U
 
     internal fun cancelInteractions() { progress.cancelGesture(); volumeFeedback.reset() }
 
-    internal fun gpuFrame(): IslandGpuFrame {
+    internal fun gpuFrame(hoverPose: IslandHoverMotion.Pose = IslandHoverMotion.Pose.SHOWN,
+        surfaceX: Int = x, surfaceY: Int = y): IslandGpuFrame {
         val reveal = expansion ?: if (expanded) 1.0 else 0.0
         val animation = if (settings.performance.animateLayout) transition else 1.0
         val controls = if (reveal > .08) listOf(previous, play, next).map {
-            IslandGpuFrame.Control(it.bounds, it.icon as PlaybackIcon, it.foreground.rgb,
+            IslandGpuFrame.Control(Rectangle(it.bounds), it.icon as PlaybackIcon, it.foreground.rgb,
                 it.model.isPressed && it.model.isArmed)
         } else emptyList()
         val info = if (controls.isNotEmpty()) trackInfo() else null
+        val progressPresentation = if (controls.isNotEmpty()) progress.presentation() else null
+        val progressBounds = if (controls.isNotEmpty()) progress.bounds?.let(::Rectangle) else null
         return IslandGpuFrame(width, height, animatedWidth, animatedHeight, anchor, settings, snapshot,
             outgoing, lyricsLayout(), outgoing?.takeIf { animation < 1.0 }?.let { lyricLayouts.forSnapshot(it, settings) },
-            longTones, bands, reveal, animation, backgroundProgress.mode, backgroundProgress.opacity,
-            info, if (info != null) infoLabel else null, controls,
-            if (controls.isNotEmpty()) progress.presentation() else null,
-            if (controls.isNotEmpty()) progress.bounds else null)
+            longTones, bands.copyOf(), reveal, animation, backgroundProgress.mode, backgroundProgress.opacity,
+            info, if (info != null) infoLabel else null, controls, progressPresentation, progressBounds, hoverPose, surfaceX, surfaceY)
     }
 
     private fun trackInfo(): ShapedText {

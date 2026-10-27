@@ -66,7 +66,7 @@ internal class SpoutPresentation(report: (Throwable) -> Unit = {}) : AutoCloseab
         // Stable scale for normal lyrics; exceptionally tall multiline content must still fit.
         val scale = minOf(2.0, (output.width - 32.0) / settings.maxWidth,
             (output.height - 32.0) / maxOf(height, desired.height.toDouble()))
-        val scene = panel.gpuFrame()
+        val scene = panel.gpuFrame(IslandHoverMotion.Pose.SHOWN)
         return SpoutAdvance(scene, scale, if (compatibility) raster(settings, scale) else null)
     }
 

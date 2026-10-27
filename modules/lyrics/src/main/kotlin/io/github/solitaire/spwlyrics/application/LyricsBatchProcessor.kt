@@ -258,7 +258,8 @@ internal fun batchSkipReason(
             return existing.get()
         }
         return try {
-            val resolved = resolver.resolveAutomaticFully(query, reference = reference, similarity = similarity) { progress ->
+            val resolved = resolver.resolveAutomaticFully(query, reference = reference, similarity = similarity,
+                priority = ResolutionPriority.BATCH) { progress ->
                 updateProgress(expectedGeneration, index, progress.fraction, stageLabel(progress.stage), progress.detail)
             }
             own.complete(resolved)
@@ -310,6 +311,6 @@ internal fun batchSkipReason(
     }
 
     private companion object {
-        const val PARALLEL_TRACKS = 3
+        const val PARALLEL_TRACKS = 2
     }
 }

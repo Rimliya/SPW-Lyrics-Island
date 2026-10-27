@@ -39,6 +39,15 @@ data class ManualOverride(
 
 const val LYRICS_CACHE_MODEL_VERSION = 6
 const val MANUAL_OVERRIDE_MODEL_VERSION = 2
+const val DEFAULT_LYRICS_CACHE_BYTES = 128L * 1024 * 1024
+
+data class CacheMaintenanceResult(
+    val beforeBytes: Long,
+    val afterBytes: Long,
+    val deletedFiles: Int,
+) {
+    val removedBytes: Long get() = (beforeBytes - afterBytes).coerceAtLeast(0)
+}
 
 interface LyricsCache {
     fun getLyrics(query: TrackQuery): CachedLyrics?
@@ -69,6 +78,7 @@ class FileLyricsCache(
             size > 64
     }
     private val trackLocks = Array(32) { Any() }
+    private val maintenanceLock = Any()
 
     init {
         Files.createDirectories(root)
@@ -142,6 +152,44 @@ class FileLyricsCache(
         }
     }
 
+    fun prune(maxBytes: Long = DEFAULT_LYRICS_CACHE_BYTES, protect: TrackQuery? = null): CacheMaintenanceResult =
+        maintain(maxBytes, protect, clearAll = false)
+
+    fun clearCachedLyrics(): CacheMaintenanceResult =
+        maintain(0L, protect = null, clearAll = true)
+
+    private fun maintain(maxBytes: Long, protect: TrackQuery?, clearAll: Boolean): CacheMaintenanceResult =
+        synchronized(maintenanceLock) {
+            val protectedPath = protect?.let { layout.lyrics(it).toAbsolutePath().normalize() }
+            val files = runCatching {
+                Files.list(layout.lyricsDirectory).use { paths ->
+                    paths.filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".json", true) }
+                        .map { path ->
+                            val size = runCatching { Files.size(path) }.getOrDefault(0L)
+                            val modified = runCatching { Files.getLastModifiedTime(path).toMillis() }.getOrDefault(0L)
+                            CacheFile(path.toAbsolutePath().normalize(), size, modified)
+                        }
+                        .toList()
+                }
+            }.getOrDefault(emptyList())
+            val before = files.sumOf(CacheFile::bytes)
+            var remaining = before
+            val target = if (clearAll) 0L else (maxBytes * 9 / 10).coerceAtLeast(0L)
+            var deleted = 0
+            for (file in files.sortedBy(CacheFile::lastModified)) {
+                if (!clearAll && remaining <= target) break
+                if (file.path == protectedPath) continue
+                if (!clearAll && Files.isRegularFile(layout.overridesDirectory.resolve(file.path.fileName))) continue
+                if (runCatching { Files.deleteIfExists(file.path) }.getOrDefault(false)) {
+                    remaining -= file.bytes
+                    deleted++
+                }
+            }
+            if (deleted > 0) synchronized(memory) { memory.clear() }
+            CacheMaintenanceResult(before, remaining.coerceAtLeast(0), deleted)
+        }
+
+    private data class CacheFile(val path: Path, val bytes: Long, val lastModified: Long)
     private fun invalidateOverrides(query: TrackQuery) = synchronized(overrides) {
         val iterator = overrides.keys.iterator()
         while (iterator.hasNext()) if (iterator.next().query == query.key) iterator.remove()
@@ -182,4 +230,5 @@ class FileLyricsCache(
 
     private data class FileStamp(val size: Long, val modifiedMs: Long)
     private data class OverrideKey(val query: String, val stamp: FileStamp?)
+
 }

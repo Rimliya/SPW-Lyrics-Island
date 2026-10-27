@@ -19,13 +19,12 @@
 `SPWLyricsIslandPlugin` 继承词岛的 `IslandPlugin`：
 
 1. 启动词岛运行时；
-2. 启动内置 `MediaRuntimePlugin`，注册 JVM-local Runtime endpoint；
-3. 启动 Tag Workbench 的嵌入式运行时，不注册独立插件或宿主 Hook；
-4. 启动 Tag 播放桥并回放启动期间收到的最新宿主状态；
-5. 向 Lyrics 的通用页面注册点注入工作台 UI；
-6. 安装 `PluginRuntime`（SPW Lyrics）；
-7. 任一步失败时按逆序回滚已启动的部分；
-8. 停止时先解除页面注册，再关闭歌词、Tag Workbench、Runtime 和词岛运行时。
+2. 启动 Tag Workbench 的嵌入式运行时，不注册独立插件或宿主 Hook；
+3. 启动 Tag 播放桥并回放启动期间收到的最新宿主状态；
+4. 向 Lyrics 的通用页面注册点注入工作台 UI；
+5. 安装 `PluginRuntime`（SPW Lyrics）；
+6. 任一步失败时按逆序回滚已启动的部分；
+7. 停止时先解除页面注册，再关闭歌词、Tag Workbench 和词岛运行时。
 
 ## 播放回调
 
@@ -62,4 +61,8 @@ modules/tag-workbench/src/main/resources/preference_config.json
 - `lib/kotlin-stdlib-*.jar` 由 SPW 宿主提供，打包时明确排除。
 - 手动搜索和批量处理窗口在第一次打开时才加载 Compose/Skiko；不用这些窗口时不会初始化额外渲染上下文。
 - 宿主只注册一个播放 Extension。词岛继续接收全部播放事件；Tag Workbench 通过可回放的状态桥接收最新快照；Lyrics 只在歌词加载链路中参与。
+- 词岛在 EDT 上生成不可变 `IslandGpuFrame` 并通过 `AtomicReference` 发布；GPU 渲染线程和 Spout 发送线程不再读取 Swing 面板或可变频谱数组。
+- Lyrics 的在线工作拆为播放/手动 4、预取 2、批量 2 三个 Provider 池，批量任务不会占满当前播放请求。
+- 歌词缓存默认约 128 MB，AMLL 索引约 16 MB；空闲维护按最近使用时间清理，当前曲目、手动匹配和本地歌词受保护。
+- AMLL 首次索引构建和刷新都在后台执行，搜索线程只读取当前不可变索引快照。
 - `combinedChecks` 在不启动 SPW 的情况下验证合并设置、Extension 注册、各回调代理、Tag Workbench 资源与页面注册；`verify-spmod.ps1` 再检查重复库名和 Kotlin 标准库泄漏。

@@ -28,6 +28,8 @@ internal data class FetchedLyrics(
     val document: LyricsDocument,
 )
 
+enum class ResolutionPriority { PLAYBACK, PREFETCH, BATCH }
+
 class LyricsResolver(
     providers: List<LyricsProvider>,
     private val clock: Clock = Clock.systemUTC(),
@@ -35,9 +37,10 @@ class LyricsResolver(
 ) : AutoCloseable {
     private val providers = providers.associateBy(LyricsProvider::source)
     private val manualCandidateInspector = ManualCandidateInspector()
-    private val providerTasks = ProviderTaskPool()
+    private val providerTasks = ProviderTaskPool(parallelism = 4)
     private val searchCache = ProviderSearchCache()
-    private val precacheTasks = ProviderTaskPool(parallelism = 7)
+    private val precacheTasks = ProviderTaskPool(parallelism = 2)
+    private val batchTasks = ProviderTaskPool(parallelism = 2)
 
     fun resolveAutomaticProgressively(
         query: TrackQuery,
@@ -60,8 +63,14 @@ class LyricsResolver(
         query: TrackQuery,
         reference: LyricsDocument? = null,
         similarity: LyricsSimilarity.Level = LyricsSimilarity.Level.STANDARD,
+        priority: ResolutionPriority = ResolutionPriority.PLAYBACK,
         onProgress: (LyricsResolutionProgress) -> Unit = {},
     ): ResolvedLyrics? {
+        val taskPool = when (priority) {
+            ResolutionPriority.PLAYBACK -> providerTasks
+            ResolutionPriority.PREFETCH -> precacheTasks
+            ResolutionPriority.BATCH -> batchTasks
+        }
         val now = System.nanoTime()
         return resolveAutomatic(
             query = query,
@@ -72,6 +81,7 @@ class LyricsResolver(
             onSnapshot = {},
             onProgress = onProgress,
             completionDeadlineNanos = now + TimeUnit.MILLISECONDS.toNanos(FULL_SEARCH_TIMEOUT_MILLIS),
+            taskPool = taskPool,
         )
     }
 
@@ -212,6 +222,7 @@ class LyricsResolver(
         searchCache.clear()
         providerTasks.close()
         precacheTasks.close()
+        batchTasks.close()
         providers.values.filterIsInstance<AutoCloseable>().forEach { provider -> runCatching { provider.close() } }
     }
 

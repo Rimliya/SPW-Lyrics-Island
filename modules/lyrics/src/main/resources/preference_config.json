@@ -16,8 +16,16 @@
           "type": "list",
           "title": "自动替换歌词",
           "summary": "控制插件何时搜索并替换 SPW 本地歌词",
-          "entries": ["始终优先使用插件歌词", "仅在本地无歌词时补充", "仅手动选择时替换"],
-          "entry_values": ["always", "when_local_missing", "manual_only"],
+          "entries": [
+            "始终优先使用插件歌词",
+            "仅在本地无歌词时补充",
+            "仅手动选择时替换"
+          ],
+          "entry_values": [
+            "always",
+            "when_local_missing",
+            "manual_only"
+          ],
           "default_value": "always"
         },
         {
@@ -25,8 +33,14 @@
           "type": "list",
           "title": "歌词选择依据",
           "summary": "类型优先先比较逐字/逐行；来源优先先比较下面的来源顺序。录音版本校验始终生效。",
-          "entries": ["歌词类型优先", "歌词来源优先"],
-          "entry_values": ["type_first", "source_first"],
+          "entries": [
+            "歌词类型优先",
+            "歌词来源优先"
+          ],
+          "entry_values": [
+            "type_first",
+            "source_first"
+          ],
           "default_value": "type_first"
         },
         {
@@ -55,8 +69,16 @@
           "type": "list",
           "title": "歌词相似度校验",
           "summary": "自动替换前先与本地歌词逐行比对，避免匹配到别的歌；严格模式下要求更高",
-          "entries": ["严格", "标准", "关闭"],
-          "entry_values": ["strict", "standard", "off"],
+          "entries": [
+            "严格",
+            "标准",
+            "关闭"
+          ],
+          "entry_values": [
+            "strict",
+            "standard",
+            "off"
+          ],
           "default_value": "standard"
         },
         {
@@ -79,6 +101,20 @@
           "summary": "在文件资源管理器中打开已缓存的歌词",
           "arrow_type": "none",
           "on_click": "io.github.solitaire.spwlyrics.integration.SpwLyricsActions.openCacheFolder"
+        },
+        {
+          "type": "button",
+          "title": "清理歌词缓存",
+          "summary": "删除自动或手动缓存的歌词 JSON；保留手动匹配记录、本地歌词和音频文件",
+          "arrow_type": "none",
+          "on_click": "io.github.solitaire.spwlyrics.integration.SpwLyricsActions.clearLyricsCache"
+        },
+        {
+          "type": "button",
+          "title": "重建 AMLL 索引",
+          "summary": "删除 AMLL 本地索引；下次搜索时重新下载，现有歌词缓存不受影响",
+          "arrow_type": "none",
+          "on_click": "io.github.solitaire.spwlyrics.integration.SpwLyricsActions.clearAmllIndex"
         }
       ]
     }

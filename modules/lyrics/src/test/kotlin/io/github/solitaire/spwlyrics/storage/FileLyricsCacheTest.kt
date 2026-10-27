@@ -7,6 +7,8 @@ import io.github.solitaire.spwlyrics.domain.LyricsSource
 import io.github.solitaire.spwlyrics.domain.TrackQuery
 import java.nio.file.Files
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -23,6 +25,37 @@ class FileLyricsCacheTest {
             cache.putLyrics(query, CachedLyrics(document(), savedAtEpochMs = System.currentTimeMillis()))
             assertTrue(cache.hasLyrics(query))
             assertTrue(FileLyricsCache(root).hasLyrics(query))
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+
+    @Test
+    fun maintenancePreservesCurrentTrackAndManualOverride() {
+        val root = Files.createTempDirectory("spw-lyrics-cache-prune")
+        try {
+            val cache = FileLyricsCache(root)
+            val older = TrackQuery("Older", listOf("Artist"), "Album")
+            val newer = TrackQuery("Newer", listOf("Artist"), "Album")
+            val extra = TrackQuery("Extra", listOf("Artist"), "Album")
+            listOf(older, newer, extra).forEach { query ->
+                cache.putLyrics(query, CachedLyrics(document(), savedAtEpochMs = System.currentTimeMillis()))
+            }
+            cache.putOverride(older, ManualOverride(local = true))
+
+            val result = cache.prune(maxBytes = 1L, protect = newer)
+            assertEquals(1, result.deletedFiles)
+            assertTrue(cache.hasLyrics(newer))
+            assertTrue(cache.hasLyrics(older))
+            assertFalse(cache.hasLyrics(extra))
+            assertNotNull(cache.getOverride(older))
+            assertEquals(2, Files.list(root.resolve("歌词")).use { it.count() })
+
+            val cleared = cache.clearCachedLyrics()
+            assertEquals(2, cleared.deletedFiles)
+            assertFalse(cache.hasLyrics(newer))
+            assertNotNull(cache.getOverride(older))
         } finally {
             root.toFile().deleteRecursively()
         }

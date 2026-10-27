@@ -22,6 +22,37 @@ fun main() {
             text.mapIndexed { index, c -> Word(index * 600L, (index + 1) * 600L, c.toString()) })
         val snap = PlaybackSnapshot(Track("Spout 测试", "本地验收", "test.wav"), line, 3000, true, PlaybackStatus.READY)
 
+        val framePanel = IslandPanel(object : PlaybackActions {
+            override fun previous() {}
+            override fun toggle() {}
+            override fun next() {}
+        })
+        try {
+            framePanel.settings = settings
+            framePanel.snapshot = snap
+            framePanel.setSize(560, 120)
+            framePanel.prepareLyrics(ActiveLyrics.select(snap, experimental = false))
+            framePanel.updateSpectrum(levels, .1)
+            framePanel.doLayout()
+            val frozen = framePanel.gpuFrame(IslandHoverMotion.Pose.SHOWN, surfaceX = 12, surfaceY = 34)
+            val frozenBands = frozen.bands.copyOf()
+            framePanel.settings = settings.copy(fontSize = 30)
+            framePanel.snapshot = snap.copy(positionMs = 6000)
+            framePanel.updateSpectrum(floatArrayOf(1f, 1f, 1f, 1f), 1.0)
+            check(frozen.settings.fontSize == settings.fontSize)
+            check(frozen.snapshot.positionMs == 3000L)
+            check(frozen.bands.contentEquals(frozenBands))
+            check(frozen.surfaceX == 12 && frozen.surfaceY == 34)
+            IslandSurface(framePanel).apply {
+                publishGpuFrame(frozen)
+                check(currentGpuFrame() === frozen)
+                clearGpuFrame()
+                check(currentGpuFrame() == null)
+            }
+        } finally {
+            framePanel.close()
+        }
+
         /** The shipped path: Skia paints straight into the sender's native buffer, read back for assertions. */
         fun native(options: IslandSettings, snapshot: PlaybackSnapshot = snap): IntArray {
             val output = options.spout

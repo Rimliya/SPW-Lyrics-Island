@@ -28,6 +28,10 @@ class AmllProvider(
     override fun searchManual(query: TrackQuery, keywords: String, limit: Int,
         onStatus: (ProviderSearchStatus) -> Unit): List<LyricsCandidate> = index.searchManual(query, keywords, limit, onStatus)
 
+    fun clearIndex(): Boolean = index.clearIndex()
+
+    fun enforceIndexLimit(maxBytes: Long): Boolean = index.enforceIndexLimit(maxBytes)
+
     override fun close() = index.close()
 
     override fun fetch(candidate: LyricsCandidate): LyricsDocument? = runCatching {
