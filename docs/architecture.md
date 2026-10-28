@@ -57,12 +57,13 @@ modules/tag-workbench/src/main/resources/preference_config.json
 - 根项目只打包一套 Compose、Skiko、JNA、Jaudiotagger 和字体资源，各模块不会各自携带副本。
 - Lyrics 只暴露 `LyricsWorkspacePageProvider` 通用注册点；Combined 注入 Tag Workbench UI，Lyrics 不直接引用 Tag Workbench 类。
 - Tag Workbench 不再安装侧栏、FAB、AppNavigation 替换或第二个播放 Extension。
-- 词岛启动后使用原生窗口诊断做一次显示自检；必要时先重建置顶状态，再内部重建显示层，不写回用户设置。
+- 词岛启动后使用原生窗口诊断做一次显示自检；x64 置顶请求使用完整 64 位 HWND 常量并校验实际 `WS_EX_TOPMOST`/可见状态，必要时再内部重建显示层，不写回用户设置。
 - `lib/kotlin-stdlib-*.jar` 由 SPW 宿主提供，打包时明确排除。
 - 手动搜索和批量处理窗口在第一次打开时才加载 Compose/Skiko；不用这些窗口时不会初始化额外渲染上下文。
 - 宿主只注册一个播放 Extension。词岛继续接收全部播放事件；Tag Workbench 通过可回放的状态桥接收最新快照；Lyrics 只在歌词加载链路中参与。
 - 词岛在 EDT 上生成不可变 `IslandGpuFrame` 并通过 `AtomicReference` 发布；GPU 渲染线程和 Spout 发送线程不再读取 Swing 面板或可变频谱数组。
 - Lyrics 的在线工作拆为播放/手动 4、预取 2、批量 2 三个 Provider 池，批量任务不会占满当前播放请求。
 - 歌词缓存默认约 128 MB，AMLL 索引约 16 MB；空闲维护按最近使用时间清理，当前曲目、手动匹配和本地歌词受保护。
-- AMLL 首次索引构建和刷新都在后台执行，搜索线程只读取当前不可变索引快照。
+- AMLL 首次索引构建和刷新都在后台执行，使用完整 `raw-lyrics-index.jsonl`，同时读取旧 `index.jsonl` 作为升级回退；搜索线程只读取当前不可变索引快照。
+- Tag Workbench v1.4.0 的艺术家图/封面缓存设 LRU 与字节上限，退出时释放；APEv2、DFF、Ogg、RIFF 等格式使用有界流式读取或安全写盘路径。
 - `combinedChecks` 在不启动 SPW 的情况下验证合并设置、Extension 注册、各回调代理、Tag Workbench 资源与页面注册；`verify-spmod.ps1` 再检查重复库名和 Kotlin 标准库泄漏。

@@ -3,7 +3,7 @@
 将 **灵动词岛**、**SPW Lyrics** 与 **SPW Tag Workbench** 合并为一个 `.spmod`：顶部歌词入口统一打开标签工作台与歌词工具，词岛负责显示，SPW Lyrics 负责多来源歌词搜索与批量处理，Tag Workbench 负责标签、封面、艺术家图与 ReplayGain，打轴频谱复用宿主已初始化的 BASS。
 
 > 插件作者：`solitaire + 大肥鱼`。本项目是基于多个上游模块的合并发行版，Windows x64 专用，保留 OBS Spout2 透明输出。感谢原作者 GaBoron，以及 Tag Workbench 的 univers629 / salt-workshop contributors。
-> 当前 1.8.2 开发分支聚焦渲染帧稳定性、歌词请求隔离、缓存配额与 AMLL 冷启动。
+> 当前 1.8.3 开发分支聚焦 Tag Workbench v1.4.0 缓存/写盘安全、AMLL 全量索引、宿主代码定位、GPU 后端回退和 x64 置顶修复。
 
 <p align="center">
   <a href="https://github.com/Rimliya/SPW-Lyrics-Island/releases/latest"><img src="https://img.shields.io/github/v/release/Rimliya/SPW-Lyrics-Island?label=Release" alt="Release"></a>
@@ -25,9 +25,9 @@ Release 提供一个运行包：`spw-lyrics-island-<版本>.spmod`；完整源�
 - 默认字体：内置苹方；MiSans 不再随包分发，可从 [小米 MiSans 官网](https://hyperos.mi.com/font) 下载安装后选择系统字体。
 - SPW Lyrics：支持 AMLL TTML、QQ 音乐、汽水音乐、酷狗音乐、网易云音乐、Apple Music、LrcShare，并从 MusicBrainz 获取元数据；可选择类型优先或来源优先。
 - 保留本地歌词相似度校验、纯音乐占位拦截、手动搜索、批量缓存、逐曲延迟、歌曲元数据/内嵌歌词编辑和下一首预取。
-- 缓存维护：歌词缓存默认约 128 MB，AMLL 索引单独约 16 MB；超限按最近使用时间清理，手动匹配和本地歌词不受影响，并提供手动清理入口。
+- 缓存维护：歌词缓存默认约 128 MB，AMLL 索引单独约 16 MB；Tag Workbench 的艺术家图、封面缓存也设有 LRU/字节上限并在退出时释放。手动匹配和本地歌词不受自动清理影响，并提供手动清理入口。
 - 频谱打轴：直接复用 Salt Player 的宿主 BASS 解码，不再内置 FFmpeg 或 Media Runtime。
-- 标签工作台：顶部歌词入口默认打开工作台，可编辑多容器标签、匹配歌词 / 封面 / 艺术家图、查看频谱和逐字打轴，并提供 ReplayGain 测量；侧栏、悬浮按钮和独立插件 Hook 已移除。
+- 标签工作台：顶部歌词入口默认打开工作台，可编辑多容器标签、匹配歌词 / 封面 / 艺术家图、查看频谱和逐字打轴，并提供 ReplayGain 测量；已合入 1.4.0 的 APEv2/DFF/MPC 写盘安全、容器识别、TTML、网络超时和缓存修复，侧栏、悬浮按钮和独立插件 Hook 保持移除。
 - 词岛右键可“禁用当前获取的逐字歌词”：自动结果不匹配时按曲目退回本地歌词，再从 SPW Lyrics 设置中手动搜索正确结果。
 - 三个配置页合并到同一个插件设置中：`灵动词岛`、`SPW Lyrics` 与 `音乐标签工作台`。
 
@@ -51,9 +51,9 @@ Lyrics 模块只暴露通用的工作台页面注册点，Tag Workbench 的实�
 
 | 模块 | 来源 | 记录版本 | 提交 |
 | --- | --- | --- | --- |
-| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.3.0-GPU` + upstream `1.2.1` + 启动显示恢复 + PingFang-only | `a0e9cc1` |
-| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `3.1.0-f.1` + Combined 页面注册 | `3a84c97` |
-| `modules/tag-workbench` | [Rimliya/SPW-Tag-Workbench](https://github.com/Rimliya/SPW-Tag-Workbench) | `embedded-workbench`（上游 1.3.3） | `c5cccbc` |
+| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.3.0-GPU` + upstream `1.2.2` GPU 回退 / x64 置顶 + 启动显示恢复 + PingFang-only | `a0e9cc1` + 1.8.3 patches |
+| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `3.1.0-f.1` + Combined 页面注册 + upstream `3.2.1` AMLL / 宿主定位修复 | `3a84c97` + 1.8.3 patches |
+| `modules/tag-workbench` | [Rimliya/SPW-Tag-Workbench](https://github.com/Rimliya/SPW-Tag-Workbench) | `embedded-workbench` + upstream `1.4.0` | `22d70be` |
 
 原始项目：[GaBoron/SPW-island](https://github.com/GaBoron/SPW-island)、[GaBoron/SPW-Lyrics](https://github.com/GaBoron/SPW-Lyrics)、[univers629/SPW-Tag-Workbench](https://github.com/univers629/SPW-Tag-Workbench)。
 
