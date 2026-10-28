@@ -3,7 +3,7 @@
 将 **灵动词岛**、**SPW Lyrics** 与 **SPW Tag Workbench** 合并为一个 `.spmod`：顶部歌词入口统一打开标签工作台与歌词工具，词岛负责显示，SPW Lyrics 负责多来源歌词搜索与批量处理，Tag Workbench 负责标签、封面、艺术家图与 ReplayGain，打轴频谱复用宿主已初始化的 BASS。
 
 > 插件作者：`solitaire + 大肥鱼`。本项目是基于多个上游模块的合并发行版，Windows x64 专用，保留 OBS Spout2 透明输出。感谢原作者 GaBoron，以及 Tag Workbench 的 univers629 / salt-workshop contributors。
-> 当前 1.8.3 开发分支聚焦 Tag Workbench v1.4.0 缓存/写盘安全、AMLL 全量索引、宿主代码定位、GPU 后端回退和 x64 置顶修复。
+> 当前 1.8.4 开发分支聚焦歌词匹配质量底线、短歌词保护，以及布局/几何/输入区域热路径缓存；不改变画面像素、播放时序和显示策略。
 
 <p align="center">
   <a href="https://github.com/Rimliya/SPW-Lyrics-Island/releases/latest"><img src="https://img.shields.io/github/v/release/Rimliya/SPW-Lyrics-Island?label=Release" alt="Release"></a>
@@ -25,6 +25,8 @@ Release 提供一个运行包：`spw-lyrics-island-<版本>.spmod`；完整源�
 - 默认字体：内置苹方；MiSans 不再随包分发，可从 [小米 MiSans 官网](https://hyperos.mi.com/font) 下载安装后选择系统字体。
 - SPW Lyrics：支持 AMLL TTML、QQ 音乐、汽水音乐、酷狗音乐、网易云音乐、Apple Music、LrcShare，并从 MusicBrainz 获取元数据；可选择类型优先或来源优先。
 - 保留本地歌词相似度校验、纯音乐占位拦截、手动搜索、批量缓存、逐曲延迟、歌曲元数据/内嵌歌词编辑和下一首预取。
+- 匹配质量底线：source-first 仍可选择偏好来源，但不会把当前逐字/逐行歌词自动降级为普通歌词；短本地歌词需要更强的文本重合才允许自动替换。
+- 热路径缓存：词岛轮廓使用小型 LRU，输入区域复用描边基础形状，歌词布局 key 只包含实际影响字体测量的设置。
 - 缓存维护：歌词缓存默认约 128 MB，AMLL 索引单独约 16 MB；Tag Workbench 的艺术家图、封面缓存也设有 LRU/字节上限并在退出时释放。手动匹配和本地歌词不受自动清理影响，并提供手动清理入口。
 - 频谱打轴：直接复用 Salt Player 的宿主 BASS 解码，不再内置 FFmpeg 或 Media Runtime。
 - 标签工作台：顶部歌词入口默认打开工作台，可编辑多容器标签、匹配歌词 / 封面 / 艺术家图、查看频谱和逐字打轴，并提供 ReplayGain 测量；已合入 1.4.0 的 APEv2/DFF/MPC 写盘安全、容器识别、TTML、网络超时和缓存修复，侧栏、悬浮按钮和独立插件 Hook 保持移除。

@@ -66,4 +66,6 @@ modules/tag-workbench/src/main/resources/preference_config.json
 - 歌词缓存默认约 128 MB，AMLL 索引约 16 MB；空闲维护按最近使用时间清理，当前曲目、手动匹配和本地歌词受保护。
 - AMLL 首次索引构建和刷新都在后台执行，使用完整 `raw-lyrics-index.jsonl`，同时读取旧 `index.jsonl` 作为升级回退；搜索线程只读取当前不可变索引快照。
 - Tag Workbench v1.4.0 的艺术家图/封面缓存设 LRU 与字节上限，退出时释放；APEv2、DFF、Ogg、RIFF 等格式使用有界流式读取或安全写盘路径。
+- 歌词选择区分偏好排序与质量底线：source-first 不能自动降低 timing 粒度；短参考歌词改用文本重合率而不是直接放行。
+- 词岛轮廓保留 16 项 LRU，输入区域缓存描边基础形状，歌词布局缓存拆分为字体/尺寸相关 key，避免颜色、Spout 等无关设置触发重测量。
 - `combinedChecks` 在不启动 SPW 的情况下验证合并设置、Extension 注册、各回调代理、Tag Workbench 资源与页面注册；`verify-spmod.ps1` 再检查重复库名和 Kotlin 标准库泄漏。
