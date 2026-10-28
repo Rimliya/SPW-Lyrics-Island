@@ -28,6 +28,7 @@ internal class AmllIndexStore(
     private val legacyIndexPath: Path? = null,
 ) : AutoCloseable {
     private val indexPath = cacheDirectory.resolve(INDEX_FILE_NAME)
+    private val legacyCacheIndexPath = cacheDirectory.resolve(LEGACY_INDEX_FILE_NAME)
     private val lock = Any()
     private val refreshExecutor = Executors.newSingleThreadExecutor { task ->
         Thread(task, "spw-amll-index-refresh").apply { isDaemon = true }
@@ -65,7 +66,9 @@ internal class AmllIndexStore(
         return searchIndex?.search(query, keywords, limit, manual = true).orEmpty()
     }
 
-    fun indexSizeBytes(): Long = runCatching { Files.size(indexPath) }.getOrDefault(0L)
+    fun indexSizeBytes(): Long = indexFiles().mapNotNull { path ->
+        runCatching { if (Files.isRegularFile(path)) Files.size(path) else null }.getOrNull()
+    }.maxOrNull() ?: 0L
 
     fun enforceIndexLimit(maxBytes: Long): Boolean {
         if (maxBytes <= 0L || indexSizeBytes() > maxBytes) return clearIndex()
@@ -83,7 +86,8 @@ internal class AmllIndexStore(
         lastRefreshAttempt = null
         searchIndex = AmllSearchIndex(emptyList())
         refreshListeners.clear()
-        runCatching { Files.deleteIfExists(indexPath) }.getOrDefault(false)
+        indexFiles().forEach { runCatching { Files.deleteIfExists(it) } }
+        true
     }
 
     private fun ensureCurrent() {
@@ -91,7 +95,6 @@ internal class AmllIndexStore(
         synchronized(lock) {
             if (closed || loading || refreshing) return
             runCatching { Files.createDirectories(cacheDirectory) }
-            migrateLegacyIndex()
             val existing = searchIndex
             if (existing == null) {
                 if (!mayAttemptRefreshLocked(now)) return
@@ -135,11 +138,14 @@ internal class AmllIndexStore(
     private fun finish(result: Result<Unit>, request: Long) {
         val listeners = synchronized(lock) {
             if (!isCurrentLocked(request)) return
+            val refreshed = refreshing
             loading = false
             refreshing = false
             refreshFailure = result.exceptionOrNull()
             refreshTask = null
-            val status = statusLocked(lastRefreshAttempt)
+            val status = statusLocked(lastRefreshAttempt).copy(
+                resultsChanged = refreshed && result.isSuccess && searchIndex?.isEmpty == false,
+            )
             refreshListeners.toList().also { refreshListeners.clear() } to status
         }
         if (!closed) listeners.first.forEach { runCatching { it(listeners.second) } }
@@ -164,9 +170,10 @@ internal class AmllIndexStore(
     private fun isStale(now: Instant): Boolean = !Files.isRegularFile(indexPath) ||
         !Files.getLastModifiedTime(indexPath).toInstant().plus(INDEX_TTL).isAfter(now)
 
-    private fun mayAttemptRefreshLocked(now: Instant): Boolean = lastRefreshAttempt
-        ?.plus(REFRESH_RETRY_DELAY)
-        ?.isAfter(now) != true
+    private fun mayAttemptRefreshLocked(now: Instant): Boolean {
+        val delay = if (Files.isRegularFile(indexPath)) REFRESH_RETRY_DELAY else INITIAL_REFRESH_RETRY_DELAY
+        return lastRefreshAttempt?.plus(delay)?.isAfter(now) != true
+    }
 
     private fun refresh(now: Instant, request: Long): AmllSearchIndex = runCatching {
         val content = http.get(AmllProvider.INDEX_URL)
@@ -193,8 +200,8 @@ internal class AmllIndexStore(
     }.getOrThrow()
 
     private fun loadIndexFile(): AmllSearchIndex? {
-        if (!Files.isRegularFile(indexPath)) return null
-        return Files.newBufferedReader(indexPath, StandardCharsets.UTF_8).use { reader ->
+        val available = indexFiles().firstOrNull(Files::isRegularFile) ?: return null
+        return Files.newBufferedReader(available, StandardCharsets.UTF_8).use { reader ->
             AmllSearchIndex(parseRecords(reader.lineSequence()))
         }
     }
@@ -204,11 +211,7 @@ internal class AmllIndexStore(
         refreshFailure = null
     }
 
-    private fun migrateLegacyIndex() {
-        val legacy = legacyIndexPath?.takeIf(Files::isRegularFile) ?: return
-        if (Files.exists(indexPath)) return
-        runCatching { moveReplacing(legacy, indexPath) }
-    }
+    private fun indexFiles(): List<Path> = listOfNotNull(indexPath, legacyCacheIndexPath, legacyIndexPath).distinct()
 
     private fun moveReplacing(source: Path, target: Path) {
         try {
@@ -232,14 +235,15 @@ internal class AmllIndexStore(
             val values = (pair[1] as JsonArray).map { (it as JsonPrimitive).content }
             key to values
         }
-        val id = root.string("id") ?: return@runCatching null
+        val rawLyricFile = root.string("rawLyricFile")?.takeIf(String::isNotBlank)
+        val id = rawLyricFile ?: root.string("id")?.takeIf(String::isNotBlank) ?: return@runCatching null
         AmllRecord(
             id = id,
             titles = metadata["musicName"].orEmpty().filter(String::isNotBlank).ifEmpty { return@runCatching null },
             artists = metadata["artists"].orEmpty(),
             albums = metadata["album"].orEmpty(),
             ids = metadata.filterKeys { it.endsWith("Id", true) },
-            rawLyricFile = root.string("rawLyricFile"),
+            rawLyricFile = rawLyricFile,
         )
     }.getOrNull()
 
@@ -257,8 +261,10 @@ internal class AmllIndexStore(
     }
 
     private companion object {
-        const val INDEX_FILE_NAME = "index.jsonl"
+        const val INDEX_FILE_NAME = "raw-lyrics-index.jsonl"
+        const val LEGACY_INDEX_FILE_NAME = "index.jsonl"
         val INDEX_TTL: Duration = Duration.ofHours(6)
+        val INITIAL_REFRESH_RETRY_DELAY: Duration = Duration.ofSeconds(30)
         val REFRESH_RETRY_DELAY: Duration = Duration.ofMinutes(5)
     }
 }

@@ -36,18 +36,21 @@ class AmllIndexStoreTest {
             http.release.countDown()
             assertTrue(statusLatch.await(3, TimeUnit.SECONDS))
             assertTrue(awaitResult(store, query))
-            assertEquals(LyricsSource.AMLL, store.search(query, "Song", 10).single().source)
+            val candidate = store.search(query, "Song", 10).single()
+            assertEquals(LyricsSource.AMLL, candidate.source)
+            assertEquals("${AmllProvider.RAW_BASE}/one.ttml", candidate.context["url"])
             assertTrue(statuses.contains(ProviderSearchPhase.SEARCHING))
         } finally {
+            http.release.countDown()
             store.close()
             root.toFile().deleteRecursively()
         }
     }
 
     @Test
-    fun freshLocalIndexLoadsWithoutNetwork() {
+    fun freshFullIndexLoadsWithoutNetwork() {
         val root = Files.createTempDirectory("spw-amll-local")
-        Files.writeString(root.resolve("index.jsonl"), INDEX)
+        Files.writeString(root.resolve("raw-lyrics-index.jsonl"), INDEX)
         val http = BlockingHttp(INDEX)
         val store = AmllIndexStore(root, http, Clock.fixed(Instant.parse("2026-10-27T00:00:00Z"), ZoneOffset.UTC))
         val query = TrackQuery("Song", listOf("Artist"), "Album")
@@ -55,7 +58,35 @@ class AmllIndexStoreTest {
             store.search(query, "Song", 10)
             assertTrue(awaitResult(store, query))
             assertEquals(0, http.calls)
+            assertEquals("one.ttml", store.search(query, "Song", 10).single().remoteId)
         } finally {
+            http.release.countDown()
+            store.close()
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun legacyIndexStaysSearchableWhileFullIndexRefreshes() {
+        val root = Files.createTempDirectory("spw-amll-legacy")
+        Files.writeString(root.resolve("index.jsonl"), INDEX)
+        val http = BlockingHttp(INDEX)
+        val store = AmllIndexStore(root, http, Clock.systemUTC())
+        val query = TrackQuery("Song", listOf("Artist"), "Album")
+        try {
+            store.search(query, "Song", 10)
+            assertTrue(awaitResult(store, query))
+            assertTrue(http.entered.await(2, TimeUnit.SECONDS))
+            assertEquals("${AmllProvider.RAW_BASE}/one.ttml", store.search(query, "Song", 10).single().context["url"])
+
+            http.release.countDown()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+            while (!Files.isRegularFile(root.resolve("raw-lyrics-index.jsonl")) && System.nanoTime() < deadline) {
+                Thread.sleep(20)
+            }
+            assertTrue(Files.isRegularFile(root.resolve("raw-lyrics-index.jsonl")))
+        } finally {
+            http.release.countDown()
             store.close()
             root.toFile().deleteRecursively()
         }

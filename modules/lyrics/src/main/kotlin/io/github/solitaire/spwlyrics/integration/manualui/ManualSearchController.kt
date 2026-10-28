@@ -85,17 +85,24 @@ internal class ManualSearchController(private val operations: ManualSearchOperat
         if (keywords.isEmpty()) { status("请输入搜索关键词。", true); return }
         val source = state.source
         val generation = ++searchGeneration
+        var refreshAfterSearch = false
         previewGeneration++
         state = state.copy(candidates = emptyList(), selected = null, document = null, lyricsMetadata = emptyMap(),
             sourceStatuses = ProviderSearchStatus.unchecked(),
             searching = true, previewing = false, searched = false, status = "正在搜索…", error = false)
         submit({ searchGeneration == generation }, { operations.search(query, keywords, source) { update ->
             EventQueue.invokeLater {
-                if (!closed && searchGeneration == generation) state = state.copy(sourceStatuses = state.sourceStatuses + (update.source to update))
+                if (!closed && searchGeneration == generation) {
+                    state = state.copy(sourceStatuses = state.sourceStatuses + (update.source to update))
+                    if (update.resultsChanged && state.selected == null && !state.mutating) {
+                        if (state.searching) refreshAfterSearch = true else search()
+                    }
+                }
             }
         } }, { rows ->
             state = state.copy(candidates = rows, searching = false, searched = true,
                 status = if (rows.isEmpty()) "没有找到候选，请缩短关键词或换一个来源。" else "")
+            if (refreshAfterSearch) search()
         }, { error ->
             state = state.copy(searching = false, searched = true, sourceStatuses = state.sourceStatuses.mapValues { (_, status) ->
                 if (status.phase == ProviderSearchPhase.SEARCHING) status.copy(phase = ProviderSearchPhase.FAILED, detail = "搜索未完成，请重试。") else status
