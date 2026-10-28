@@ -39,7 +39,7 @@
           "key": "view.showArtistSlots",
           "title": "工作台主视图显示艺术家封面",
           "summary": "关闭后主封面下方不再显示艺术家封面槽位",
-          "default": true
+          "default_value": true
         },
         {
           "type": "button",

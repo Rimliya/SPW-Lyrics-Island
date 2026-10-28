@@ -35,6 +35,8 @@ kotlin {
                 "**/spwtagworkbench/MainPlugin.kt",
                 "**/spwtagworkbench/ui/HostPassthrough.kt",
                 "**/spwtagworkbench/extension/PlaybackExt.kt",
+                "**/spwtagworkbench/backend/host/TitlebarDiscovery.kt",
+                "**/spwtagworkbench/ui/titlebar/**",
             )
         }
         test {
