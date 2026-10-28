@@ -391,11 +391,18 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
             nextTopmostCheck = 0
             surface.repaint()
         }
-        if (topmostAvailable && now >= nextTopmostCheck) {
-            try { native.reinforceTopmost(window) }
-            catch (error: Exception) {
-                IslandLog.failure("IslandWindow", "caught.error", error); topmostAvailable = false; report(error) }
-            nextTopmostCheck = now + performance.topmostCheckIntervalNs
+        if (now >= nextTopmostCheck) {
+            val wasAvailable = topmostAvailable
+            try {
+                topmostAvailable = native.reinforceTopmost(window, performance.topmostRefreshIntervalNs)
+            } catch (error: Exception) {
+                IslandLog.failure("IslandWindow", "topmost.failed", error)
+                topmostAvailable = false
+                if (wasAvailable) report(error)
+            }
+            if (!wasAvailable && topmostAvailable) IslandLog.event("window", "topmost.recovered")
+            nextTopmostCheck = now + if (topmostAvailable) performance.topmostCheckIntervalNs
+                else performance.topmostRetryIntervalNs
         }
         if (nativeAvailable && clickThroughApplied != inputClickThrough) {
             try { native.clickThrough(window, inputClickThrough); clickThroughApplied = inputClickThrough }
@@ -452,6 +459,7 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
         if (stage == "topmost") {
             try {
                 native.forceTopmost(window)
+                topmostAvailable = true
                 nextTopmostCheck = 0
                 surface.repaint()
                 if (renderer.active) {

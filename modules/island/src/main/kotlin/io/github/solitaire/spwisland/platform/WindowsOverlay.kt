@@ -12,8 +12,16 @@ import java.awt.Window
 
 /** Windows-only capabilities. All access is from the Swing event thread. */
 class WindowsOverlay {
-    companion object { private const val ERROR_INVALID_WINDOW_HANDLE = 1400 }
+    companion object {
+        private const val ERROR_INVALID_WINDOW_HANDLE = 1400
+        // Int overloads zero-extend -1 on x64, producing an invalid HWND instead of HWND_TOPMOST.
+        private val HWND_TOPMOST = HWND(Pointer.createConstant(-1L))
+        private val HWND_NOTOPMOST = HWND(Pointer.createConstant(-2L))
+    }
     private val user32 = if (Platform.isWindows()) User32.INSTANCE else null
+    private var lastTopmostPeer: HWND? = null
+    private var lastForeground: HWND? = null
+    private var nextTopmostRefresh = 0L
     val supportsClickThrough: Boolean get() = user32 != null
     val supportsStableTranslucentCanvas: Boolean get() = user32 != null
     private fun handle(window: Window) = HWND(Native.getWindowPointer(window))
@@ -24,18 +32,50 @@ class WindowsOverlay {
         return hwnd.takeIf { api.IsWindow(it) }
     }
 
-    fun reinforceTopmost(window: Window) {
-        val api = user32 ?: return
-        if (!window.isDisplayable || !window.isVisible) return
-        val hwnd = existingHandle(window, api) ?: return
-        // Reassert the top of the topmost band without moving, resizing or taking keyboard focus.
-        val flags = 0x0001 or 0x0002 or 0x0010 or 0x0200 // NOSIZE | NOMOVE | NOACTIVATE | NOOWNERZORDER
+    fun reinforceTopmost(window: Window, refreshIntervalNs: Long): Boolean {
+        val api = user32 ?: return true
+        if (!window.isDisplayable || !window.isVisible) return false
+        val hwnd = existingHandle(window, api) ?: run {
+            lastTopmostPeer = null
+            return false
+        }
+        val now = System.nanoTime()
+        val foreground = api.GetForegroundWindow()
+        val peerChanged = hwnd != lastTopmostPeer
+        if (peerChanged) lastTopmostPeer = hwnd
+        val wasTopmost = api.GetWindowLong(hwnd, -20) and 8 != 0
+        val wasVisible = api.IsWindowVisible(hwnd)
+        val wasMinimized = api.GetWindowLong(hwnd, -16) and 0x20000000 != 0
+        if (!peerChanged && wasTopmost && wasVisible && !wasMinimized &&
+            foreground == lastForeground && now < nextTopmostRefresh) return true
+
+        // Recover only a policy-visible island, without activating another application.
+        if (wasMinimized) api.ShowWindow(hwnd, 4) // SW_SHOWNOACTIVATE
+        val flags = 0x0001 or 0x0002 or 0x0010 or 0x0200 or
+            if (!wasVisible || wasMinimized) 0x0040 else 0 // SWP_SHOWWINDOW
         Native.setLastError(0)
-        if (api.SetWindowPos(hwnd, HWND(Pointer.createConstant(-1)), 0, 0, 0, 0, flags)) return
-        val error = Native.getLastError()
-        // AWT may replace a native peer around a visibility transition. Reacquire it on the next tick.
-        if (error == ERROR_INVALID_WINDOW_HANDLE) return
-        error("无法维持词岛置顶：$error")
+        val requested = api.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
+        val errorCode = if (requested) 0 else Native.getLastError()
+        val exists = api.IsWindow(hwnd)
+        val isTopmost = exists && api.GetWindowLong(hwnd, -20) and 8 != 0
+        val isVisible = exists && api.IsWindowVisible(hwnd)
+        val isMinimized = exists && api.GetWindowLong(hwnd, -16) and 0x20000000 != 0
+        if (!exists) {
+            lastTopmostPeer = null
+            return false
+        }
+        if (!requested || !isTopmost || !isVisible || isMinimized) {
+            nextTopmostRefresh = 0L
+            val detail = when {
+                errorCode == ERROR_INVALID_WINDOW_HANDLE -> "目标窗口仍有效；置顶请求句柄无效"
+                !requested -> "系统拒绝置顶请求"
+                else -> "请求成功但原生状态校验未通过"
+            }
+            error("无法维持词岛置顶：$errorCode（$detail）")
+        }
+        lastForeground = foreground
+        nextTopmostRefresh = now + refreshIntervalNs
+        return true
     }
 
     /** Force a fresh native topmost transition without touching persistent settings. */
@@ -44,17 +84,19 @@ class WindowsOverlay {
         if (!window.isDisplayable || !window.isVisible) return
         val hwnd = existingHandle(window, api) ?: return
         val flags = 0x0001 or 0x0002 or 0x0010 or 0x0200 // NOSIZE | NOMOVE | NOACTIVATE | NOOWNERZORDER
-        fun place(target: Long) {
+        fun place(target: HWND) {
             Native.setLastError(0)
-            if (!api.SetWindowPos(hwnd, HWND(Pointer.createConstant(target)), 0, 0, 0, 0, flags)) {
+            if (!api.SetWindowPos(hwnd, target, 0, 0, 0, 0, flags)) {
                 error("无法重建词岛置顶状态：${Native.getLastError()}")
             }
         }
         // Some AWT peers ignore a repeated HWND_TOPMOST request. Leave the topmost band
         // first so the following request performs a real WS_EX_TOPMOST transition.
-        place(-2L) // HWND_NOTOPMOST
-        place(-1L) // HWND_TOPMOST
-        if (api.GetWindowLong(hwnd, -20) and 8 == 0) error("词岛置顶状态未生效")
+        place(HWND_NOTOPMOST)
+        place(HWND_TOPMOST)
+        if (!api.IsWindow(hwnd) || !api.IsWindowVisible(hwnd) || api.GetWindowLong(hwnd, -20) and 8 == 0) {
+            error("词岛置顶状态未生效")
+        }
     }
 
     fun clickThrough(window: Window, enabled: Boolean) {
