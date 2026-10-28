@@ -15,6 +15,15 @@ class IslandSurface(val island: IslandPanel) : JPanel(null) {
     internal val renderCapacity = Dimension()
     internal var gpuRedraw: (() -> Unit)? = null
     private val latestGpuFrame = AtomicReference<IslandGpuFrame?>()
+    private data class InputRegionKey(
+        val width: Int,
+        val height: Int,
+        val shape: io.github.solitaire.spwisland.core.IslandShape,
+        val cornerRoundness: Int,
+        val squircle: Boolean,
+    )
+    private var inputRegionKey: InputRegionKey? = null
+    private var inputRegionBase: Shape? = null
 
     init { isOpaque = false; isDoubleBuffered = false; island.isDoubleBuffered = false; add(island) }
 
@@ -48,11 +57,21 @@ class IslandSurface(val island: IslandPanel) : JPanel(null) {
         } finally { g.dispose() }
     }
 
+    @Synchronized
     fun inputRegion(): Shape {
-        val shape = IslandGeometry.silhouette(island.width, island.height, island.settings.shape,
-            island.settings.cornerRoundness, island.settings.squircle)
-        // The region includes the antialiased outer edge instead of clipping it to a hard pixel boundary.
-        val padded = Area(shape).apply { add(Area(BasicStroke(2f).createStrokedShape(shape))) }
+        val settings = island.settings
+        val key = InputRegionKey(island.width, island.height, settings.shape, settings.cornerRoundness, settings.squircle)
+        val padded = if (key == inputRegionKey) {
+            checkNotNull(inputRegionBase)
+        } else {
+            val shape = IslandGeometry.silhouette(island.width, island.height, settings.shape,
+                settings.cornerRoundness, settings.squircle)
+            // Include the antialiased outer edge instead of clipping it to a hard pixel boundary.
+            Area(shape).apply { add(Area(BasicStroke(2f).createStrokedShape(shape))) }.also {
+                inputRegionKey = key
+                inputRegionBase = it
+            }
+        }
         return AffineTransform.getTranslateInstance(island.x.toDouble(), island.y.toDouble()).createTransformedShape(padded)
     }
 }

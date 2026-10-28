@@ -55,15 +55,45 @@ class IslandLyricsLayout private constructor(snapshot: PlaybackSnapshot, private
     }
 
     class Cache {
+        /**
+         * Only fields that participate in text shaping, row metrics or width/height are part of the key.
+         * Colour, animation, Spout and other output settings must not force a full font remeasure.
+         */
+        private data class SettingsKey(
+            val translation: Boolean,
+            val karaoke: Boolean,
+            val forceKaraoke: Boolean,
+            val experimentalMultiLine: Boolean,
+            val shape: IslandShape,
+            val squircle: Boolean,
+            val cornerRoundness: Int,
+            val heightMode: IslandHeightMode,
+            val fixedHeight: Int,
+            val fixedWidth: Boolean,
+            val leadingContent: LeadingContent,
+            val trailingContent: TrailingContent,
+            val fontFamily: String,
+            val fontWeight: LyricFontWeight,
+            val fontSize: Int,
+            val maxWidth: Int,
+        ) {
+            constructor(settings: IslandSettings) : this(
+                settings.translation, settings.karaoke, settings.forceKaraoke, settings.experimentalMultiLine,
+                settings.shape, settings.squircle, settings.cornerRoundness, settings.heightMode,
+                settings.fixedHeight, settings.fixedWidth, settings.leadingContent, settings.trailingContent,
+                settings.fontFamily, settings.fontWeight, settings.fontSize, settings.maxWidth,
+            )
+        }
+
         private data class Key(val lines: List<LyricLine>, val title: String?, val wordTiming: Boolean,
-                               val settings: IslandSettings)
+                               val settings: SettingsKey)
         private val cache = object : LinkedHashMap<Key, IslandLyricsLayout>(16, .75f, true) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, IslandLyricsLayout>) = size > 24
         }
 
         fun forSnapshot(snapshot: PlaybackSnapshot, settings: IslandSettings,
                         lines: List<LyricLine> = ActiveLyrics.select(snapshot, settings.experimentalMultiLine)): IslandLyricsLayout {
-            val key = Key(lines, snapshot.track?.title, snapshot.usesWordTiming, settings)
+            val key = Key(lines, snapshot.track?.title, snapshot.usesWordTiming, SettingsKey(settings))
             synchronized(cache) { cache[key]?.let { return it } }
             // Cold font measurement also runs on the preparation worker; never hold the cache lock for it.
             val measured = IslandLyricsLayout(snapshot, settings, lines)
