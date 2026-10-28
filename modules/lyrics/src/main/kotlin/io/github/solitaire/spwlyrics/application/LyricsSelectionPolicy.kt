@@ -11,6 +11,9 @@ internal object LyricsSelectionPolicy {
         Comparator { left, right -> preferences.compare(left.candidate.source, left.document.quality, right.candidate.source, right.document.quality) },
     )
 
-    fun canReplace(current: LyricsDocument, replacement: LyricsDocument, preferences: LyricsPreferences): Boolean =
-        preferences.compare(replacement.source, replacement.quality, current.source, current.quality) <= 0
+    fun canReplace(current: LyricsDocument, replacement: LyricsDocument, preferences: LyricsPreferences): Boolean {
+        // Source order may choose a preferred provider, but it must never downgrade timing granularity.
+        if (replacement.quality.rank < current.quality.rank) return false
+        return preferences.compare(replacement.source, replacement.quality, current.source, current.quality) <= 0
+    }
 }

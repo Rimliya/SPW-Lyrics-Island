@@ -11,6 +11,8 @@ object LyricsSimilarity {
     const val MIN_REFERENCE_LINES = 5
     const val MIN_LINE_CHARACTERS = 4
     const val LINE_MATCH = 0.62
+    /** A short reference may still reject clearly unrelated text, but needs stronger overlap. */
+    const val SHORT_REFERENCE_REJECT_BELOW = 0.55
 
     /** Rejection floor, configurable from the plugin settings. */
     enum class Level(val configValue: String, val rejectBelow: Double) {
@@ -39,7 +41,7 @@ object LyricsSimilarity {
         val lines = usableLines(document)
         val comparable = lines.size >= MIN_REFERENCE_LINES
         return Reference(
-            lines = if (comparable) lines.map(TextNormalizer::prepare) else emptyList(),
+            lines = lines.map(TextNormalizer::prepare),
             cjkShare = cjkShare(lines),
             comparable = comparable,
         )
@@ -47,14 +49,13 @@ object LyricsSimilarity {
 
     fun compare(reference: Reference, candidate: LyricsDocument): Result {
         val candidateLines = usableLines(candidate)
-        if (!reference.comparable || candidateLines.size < MIN_REFERENCE_LINES) {
-            return Result(1.0, comparable = false)
-        }
+        if (reference.lines.isEmpty()) return Result(1.0, comparable = false)
+        if (candidateLines.size < MIN_REFERENCE_LINES) return Result(0.0, comparable = false)
         if (!sameScript(reference.cjkShare, cjkShare(candidateLines))) return Result(1.0, comparable = false)
         val candidatePrepared = candidateLines.map(TextNormalizer::prepare)
         return Result(
             maxOf(coverage(reference.lines, candidatePrepared), coverage(candidatePrepared, reference.lines)),
-            comparable = true,
+            comparable = reference.comparable,
         )
     }
 
@@ -69,8 +70,11 @@ object LyricsSimilarity {
         candidate: LyricsDocument,
         level: Level = Level.STANDARD,
     ): Boolean {
-        if (level == Level.OFF || reference == null) return true
-        return compare(reference, candidate).let { !it.comparable || it.coverage >= level.rejectBelow }
+        if (level == Level.OFF || reference == null || reference.lines.isEmpty()) return true
+        val result = compare(reference, candidate)
+        if (result.comparable) return result.coverage >= level.rejectBelow
+        // Short or incomplete references use the same text comparison, with a stricter floor.
+        return result.coverage >= maxOf(level.rejectBelow, SHORT_REFERENCE_REJECT_BELOW)
     }
 
     fun accepts(

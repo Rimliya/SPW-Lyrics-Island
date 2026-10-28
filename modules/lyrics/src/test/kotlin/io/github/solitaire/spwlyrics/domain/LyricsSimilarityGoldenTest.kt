@@ -2,6 +2,8 @@ package io.github.solitaire.spwlyrics.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class LyricsSimilarityGoldenTest {
     private fun document(vararg lines: String) = LyricsDocument(
@@ -46,4 +48,23 @@ class LyricsSimilarityGoldenTest {
             }
         }
     }
+    @Test
+    fun shortReferenceRequiresStrongerTextOverlap() {
+        val short = document("第一句歌词", "第二句歌词", "第三句歌词")
+        val matching = document(
+            "第一句歌词", "第二句歌词", "第三句歌词", "第四句额外内容", "第五句额外内容",
+        )
+        val different = document(
+            "完全不同的内容", "没有一句相同", "只是无关测试", "继续制造差异", "仍然不能通过",
+        )
+        assertTrue(LyricsSimilarity.accepts(short, matching, LyricsSimilarity.Level.STANDARD))
+        assertFalse(LyricsSimilarity.accepts(short, different, LyricsSimilarity.Level.STANDARD))
+    }
+
+    @Test
+    fun shortCandidateCannotBypassFullReference() {
+        val candidate = document("你便是世界上的美好", "永远闪耀", "愿你的旅途一路顺风")
+        assertFalse(LyricsSimilarity.accepts(reference, candidate, LyricsSimilarity.Level.STANDARD))
+    }
+
 }
