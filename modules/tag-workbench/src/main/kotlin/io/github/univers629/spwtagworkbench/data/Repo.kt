@@ -51,6 +51,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -2623,7 +2624,9 @@ object Repo {
                 lyricBase = text
                 lyricText = text
                 lyricsEpoch++
-                lyricSource = L10n.t("status2.onlineSource", label ?: L10n.t("status2.unknownSource"))
+                val wordSynced = LyricsFormat.isReallyWordSynced(text)
+                lyricSource = onlineSourceLabel(label, wordSynced)
+                recordWordSyncIfOwn(ranked.candidate, label, wordSynced)
                 postStatus(Status(L10n.t("status.onlineLyricsLoaded", label ?: L10n.t("status.unknown")), Status.Kind.Ok))
             }
         }
@@ -3324,6 +3327,69 @@ object Repo {
     var lyricMatch by mutableStateOf<LyricMatch>(LyricMatch.Idle)
         private set
 
+    /** Confirmed word-synced candidates: key = source id + remote id. */
+    var wordSyncedCandidates by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    private val inspectedCandidates = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val wordSyncInFlight = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private const val INSPECT_CONCURRENCY = 4
+
+    private fun candidateKey(sourceId: String, remoteId: String): String = "$sourceId|$remoteId"
+
+    fun isWordSyncedCandidate(sourceId: String, remoteId: String): Boolean =
+        candidateKey(sourceId, remoteId) in wordSyncedCandidates
+
+    private fun recordWordSync(sourceId: String, remoteId: String, wordSynced: Boolean) {
+        val key = candidateKey(sourceId, remoteId)
+        inspectedCandidates += key
+        if (wordSynced && key !in wordSyncedCandidates) wordSyncedCandidates = wordSyncedCandidates + key
+    }
+
+    private fun onlineSourceLabel(sourceLabel: String?, wordSynced: Boolean): String {
+        val base = L10n.t("status2.onlineSource", sourceLabel ?: L10n.t("status2.unknownSource"))
+        return if (wordSynced) "$base · ${L10n.t("lyrics.wordSynced")}" else base
+    }
+
+    private fun recordWordSyncIfOwn(candidate: SourceCandidate, returnedLabel: String?, wordSynced: Boolean) {
+        val own = sources.firstOrNull { it.id == candidate.sourceId } ?: return
+        if (returnedLabel != null && returnedLabel != own.label) return
+        recordWordSync(candidate.sourceId, candidate.remoteId, wordSynced)
+    }
+
+    /** Confirm timing granularity after candidates are visible, without blocking the first screen. */
+    private fun inspectWordSyncedCandidates(groups: List<SourceGroup>, token: Int) {
+        val targets = groups
+            .filter { group -> sources.firstOrNull { it.id == group.sourceId }?.supports(Capability.WORD_SYNCED) == true }
+            .flatMap { group -> group.items.map { group.sourceId to it.candidate } }
+            .filter { (sourceId, candidate) -> candidateKey(sourceId, candidate.remoteId) !in inspectedCandidates }
+            .distinctBy { (sourceId, candidate) -> candidateKey(sourceId, candidate.remoteId) }
+        if (targets.isEmpty()) return
+        Diag.log("word-sync: inspect ${targets.size} candidates")
+        val permits = Semaphore(INSPECT_CONCURRENCY)
+        scope.launch {
+            coroutineScope {
+                targets.map { (sourceId, candidate) ->
+                    async {
+                        val key = candidateKey(sourceId, candidate.remoteId)
+                        if (!wordSyncInFlight.add(key)) return@async
+                        try {
+                            val source = sources.firstOrNull { it.id == sourceId } ?: return@async
+                            val text = permits.withPermit { runCatching { source.lyrics(candidate) }.getOrNull() } ?: return@async
+                            val wordSynced = LyricsFormat.isReallyWordSynced(text)
+                            withContext(Dispatchers.Main) {
+                                if (!Epoch.onlineAlive(token)) return@withContext
+                                recordWordSync(sourceId, candidate.remoteId, wordSynced)
+                            }
+                        } finally {
+                            wordSyncInFlight.remove(key)
+                        }
+                    }
+                }.awaitAll()
+            }
+        }
+    }
+
     /** 搜索在线歌词候选（只要声明了 LYRICAL 能力的源）。 */
     fun searchLyrics() {
         val meta = focused()
@@ -3344,10 +3410,11 @@ object Repo {
                 collected += group
                 withContext(Dispatchers.Main) {
                     if (!Epoch.onlineAlive(token)) return@withContext
-                    // 每组一回来就重排一次：组间按源权重，组内已按匹配等级排好
+                    // 先让候选上屏，再在后台确认逐字粒度。
                     val snapshot =
                         collected.toList().sortedWith(compareByDescending<SourceGroup> { it.weight })
                     lyricMatch = LyricMatch.Done(snapshot)
+                    inspectWordSyncedCandidates(snapshot, token)
                     val total = snapshot.sumOf { it.items.size }
                     postStatus(
                         Status(
@@ -3424,7 +3491,9 @@ object Repo {
                 lyricBase = text
                 lyricText = text
                 lyricsEpoch++
-                lyricSource = L10n.t("status2.onlineSource", label ?: L10n.t("status2.unknownSource"))
+                val wordSynced = LyricsFormat.isReallyWordSynced(text)
+                lyricSource = onlineSourceLabel(label, wordSynced)
+                recordWordSyncIfOwn(candidate, label, wordSynced)
                 postStatus(
                     Status(
                         text = L10n.t("status2.lyricsLoaded", label ?: L10n.t("status.unknown"), parsed.size),
