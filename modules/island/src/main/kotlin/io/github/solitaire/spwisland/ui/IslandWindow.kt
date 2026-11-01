@@ -558,7 +558,20 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
 
     override fun close() {
         if (closed) return
-        closed = true; diagnostics.close(); frameScheduler.shutdownNow(); renderer.close(); spout?.close(); panel.close(); menu.close()
-        pointerPresence?.close(); globalPointer?.close(); inputRegion?.close(); window.releaseFrame(); window.dispose()
+        closed = true
+        fun release(name: String, action: () -> Unit) {
+            try { action() } catch (error: Throwable) { IslandLog.failure("window", "release.$name.failed", error) }
+        }
+        release("scheduler") { frameScheduler.shutdownNow() }
+        release("diagnostics") { diagnostics.close() }
+        release("renderer") { renderer.close() }
+        release("spout") { spout?.close() }
+        release("panel") { panel.close() }
+        release("menu") { menu.close() }
+        release("pointerPresence") { pointerPresence?.close() }
+        release("globalPointer") { globalPointer?.close() }
+        release("inputRegion") { inputRegion?.close() }
+        release("frame") { window.releaseFrame() }
+        release("peer") { window.dispose() }
     }
 }

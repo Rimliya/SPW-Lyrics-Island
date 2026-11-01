@@ -18,10 +18,22 @@ import io.github.solitaire.spwisland.diagnostics.IslandLog
 
 class IslandRuntime(private val menuActions: IslandMenuActions? = null) : AutoCloseable {
     val timeline = PlaybackTimeline()
-    private val metadata = TrackMetadataLoader(timeline)
+    private val metadata = TrackMetadataLoader(timeline, performance = { settings.read().performance })
     fun trackChanged(track: io.github.solitaire.spwisland.core.Track) {
         IslandLog.event("playback", "track.changed")
         metadata.load(track)
+    }
+    fun stateChanged(value: io.github.solitaire.spwisland.core.PlaybackStatus) {
+        timeline.stateChanged(value)
+        metadata.recoverMissingTrack()
+    }
+    fun playingChanged(value: Boolean) {
+        timeline.playingChanged(value)
+        metadata.recoverMissingTrack()
+    }
+    fun positionChanged(value: Long) {
+        timeline.positionChanged(value)
+        metadata.recoverMissingTrack()
     }
     fun lineChanged(line: io.github.solitaire.spwisland.core.LyricLine?) = timeline.lineChanged(line)
     fun lyricsChanged(lines: List<io.github.solitaire.spwisland.core.LyricLine>) {
@@ -112,7 +124,7 @@ class IslandRuntime(private val menuActions: IslandMenuActions? = null) : AutoCl
     override fun close() {
         if (closed) return
         closed = true
-        ui?.close()
+        try { ui?.close() } catch (error: Throwable) { IslandLog.failure("IslandRuntime", "close.ui.failed", error) }
         val remote = linuxWindow
         linuxWindow = null
         listOfNotNull(shortcut, volume, remote, fontPicker, metadata, settings, spectrum).forEach { resource ->

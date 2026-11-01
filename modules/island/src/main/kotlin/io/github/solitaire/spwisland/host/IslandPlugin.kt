@@ -44,14 +44,14 @@ open class IslandPlugin(context: PluginContext) : SpwPlugin(context) {
         }
     }
     open override fun stop() {
-        val old = runtime ?: run { IslandLog.finish(); return }
+        val old = runtime ?: run { IslandLog.stop(); return }
         playback.detach(old)
         runtime = null
         val operation = IslandLog.operation("lifecycle", "plugin.stop")
         try { old.close(); operation.close() }
         catch (error: Throwable) {
             IslandLog.failure("IslandPlugin", "caught.error", error); operation.failed(error); throw error
-        } finally { IslandLog.finish() }
+        } finally { IslandLog.stop() }
     }
     open override fun update() = stop()
     open override fun delete() = stop()
