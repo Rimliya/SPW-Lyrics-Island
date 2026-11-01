@@ -11,12 +11,14 @@ import io.github.solitaire.spwlyrics.application.LyricsBatchProcessor
 import io.github.solitaire.spwlyrics.application.LyricsResolver
 import io.github.solitaire.spwlyrics.application.LyricsPrecache
 import io.github.solitaire.spwlyrics.application.LyricsOutputRouter
+import io.github.solitaire.spwlyrics.application.LyricsStartupRecovery
 import io.github.solitaire.spwlyrics.domain.LyricsCandidate
 import io.github.solitaire.spwlyrics.domain.LyricsDocument
 import io.github.solitaire.spwlyrics.domain.LyricsSimilarity
 import io.github.solitaire.spwlyrics.domain.LyricsSource
 import io.github.solitaire.spwlyrics.domain.TrackQuery
 import io.github.solitaire.spwlyrics.domain.ProviderSearchStatus
+import io.github.solitaire.spwlyrics.codec.MetadataLyricsFormat
 import io.github.solitaire.spwlyrics.provider.AmllProvider
 import io.github.solitaire.spwlyrics.provider.KugouMusicProvider
 import io.github.solitaire.spwlyrics.provider.LocalLyricsProvider
@@ -38,6 +40,7 @@ import io.github.solitaire.spwlyrics.integration.workspace.LyricsWorkspaceSessio
 import io.github.solitaire.spwlyrics.integration.workspace.LyricsToolPage
 import io.github.solitaire.spwlyrics.integration.hostui.HostUiIntegration
 import io.github.solitaire.spwlyrics.storage.FileLyricsDelaySettings
+import io.github.solitaire.spwlyrics.storage.LyricsUiStateStore
 import io.github.solitaire.spwlyrics.storage.FileTimingCalibrationStore
 import java.time.Duration
 import java.util.concurrent.Executors
@@ -47,6 +50,8 @@ import java.util.concurrent.TimeUnit
 
 object PluginRuntime {
     @Volatile private var coordinator: LyricsLoadCoordinator? = null
+    @Volatile private var startupRecovery: LyricsStartupRecovery? = null
+    @Volatile private var startupRecoveryExecutor: ScheduledExecutorService? = null
     @Volatile private var batchProcessor: LyricsBatchProcessor? = null
     @Volatile private var precache: LyricsPrecache? = null
     @Volatile private var workspace: LyricsWorkspace? = null
@@ -70,6 +75,7 @@ object PluginRuntime {
         val cache = FileLyricsCache(cacheDirectory)
         lyricsCache = cache
         val delays = FileLyricsDelaySettings(root.resolve("歌词延迟"))
+        val uiState = LyricsUiStateStore(root.resolve("工作区状态.properties"))
         cacheFolderOpener = CacheFolderOpener(cacheDirectory)
         settings = PluginSettings(WorkshopApi.manager.createConfigManager(), {
             coordinator?.selectionChanged()
@@ -136,6 +142,10 @@ object PluginRuntime {
             else "批量处理失败：${error.message ?: "未知错误"}"
         }
         val metadataOperations = object : MetadataEditorOperations {
+            override fun lyricsFormat() = MetadataLyricsFormat.fromStorageValue(uiState.lyricsFormat())
+            override fun saveLyricsFormat(format: MetadataLyricsFormat) = uiState.rememberLyricsFormat(format.name)
+            override fun metadataImportFillMissing() = uiState.metadataImportFillMissing()
+            override fun saveMetadataImportFillMissing(value: Boolean) = uiState.rememberMetadataImportFillMissing(value)
             override fun currentAudioPath() = currentQuery()?.path
             override fun chooseAudioFile() = MetadataFilePicker.audio()
             override fun chooseLyricsFile() = MetadataFilePicker.lyrics()
@@ -149,10 +159,16 @@ object PluginRuntime {
             }
         }
         val manualOperations = object : ManualSearchOperations {
+            override fun candidateSort() = uiState.candidateSort()
+            override fun saveCandidateSort(value: String) = uiState.rememberCandidateSort(value)
+            override fun searchSource() = uiState.searchSource()
+            override fun saveSearchSource(value: String?) = uiState.rememberSearchSource(value)
+            override fun applied(query: TrackQuery) = coordinator?.manualSelection(query)
             override fun currentQuery() = PluginRuntime.currentQuery()
             override fun search(query: TrackQuery, keywords: String, source: LyricsSource?, onStatus: (ProviderSearchStatus) -> Unit) =
                 checkNotNull(coordinator) { "歌词搜索尚未启用。" }.searchManual(query, keywords, source, onStatus)
             override fun preview(candidate: LyricsCandidate) = coordinator?.preview(candidate)
+            override fun automatic(query: TrackQuery) = coordinator?.previewAutomatic(query)
             override fun apply(query: TrackQuery, candidate: LyricsCandidate) =
                 isCurrentTrack(query) && coordinator?.applyManual(query, candidate) == true
             override fun useLocal(query: TrackQuery) = isCurrentTrack(query) && coordinator?.useLocal(query) == true
@@ -170,6 +186,11 @@ object PluginRuntime {
         workspace = LyricsWorkspace({ LyricsWorkspaceSession(manualOperations, metadataOperations, batch, describeBatchFailure,
             timingTransport, calibration, BassTimingAudioDecoder()) }, ::toastWarning)
         hostUi = HostUiIntegration(checkNotNull(workspace), ::toastWarning).also { it.start() }
+        val recoveryExecutor = Executors.newSingleThreadScheduledExecutor { task ->
+            Thread(task, "spw-lyrics-startup-recovery").apply { isDaemon = true }
+        }
+        startupRecoveryExecutor = recoveryExecutor
+        startupRecovery = LyricsStartupRecovery(recoveryExecutor, ::currentQuery, refreshBridge, { SpwLyricsExtension.discovered }).also { it.start() }
         startCacheMaintenance()
     }
 
@@ -284,6 +305,10 @@ object PluginRuntime {
 
     @Synchronized
     fun close() {
+        startupRecovery?.close()
+        startupRecovery = null
+        startupRecoveryExecutor?.shutdownNow()
+        startupRecoveryExecutor = null
         maintenanceTask?.cancel(false); maintenanceTask = null
         maintenanceExecutor?.shutdownNow(); maintenanceExecutor = null
         lyricsCache = null
@@ -317,6 +342,7 @@ object PluginRuntime {
             settings?.automaticReplacementPolicy() ?: AutomaticReplacementPolicy.ALWAYS,
             localTtml,
         )
+        if (phase == LyricsLoadPhase.BEFORE_LOCAL) startupRecovery?.beforeLoadCompleted(query)
         precache?.trackChanged(query)
         return result
     }

@@ -12,7 +12,12 @@ internal data class ManualSearchState(
     val metadataOnly: Boolean = false,
     val keywords: String = "",
     val source: LyricsSource? = null,
+    val sort: CandidateColumn = CandidateColumn.PREFERENCE,
     val candidates: List<CandidateScore> = emptyList(),
+    val automatic: CandidateScore? = null,
+    val applied: CandidateScore? = null,
+    val automaticDocument: LyricsDocument? = null,
+    val matchingAutomatic: Boolean = false,
     val sourceStatuses: Map<LyricsSource, ProviderSearchStatus> = ProviderSearchStatus.unchecked(),
     val selected: CandidateScore? = null,
     val document: LyricsDocument? = null,
@@ -34,4 +39,8 @@ internal data class ManualSearchState(
     val busy: Boolean get() = readingTrack || searching || previewing || mutating
     val canSearch: Boolean get() = query != null && !readingTrack && !searching && !mutating
     val canMutate: Boolean get() = query != null && !busy && !metadataOnly
+
+    fun isAutomatic(row: CandidateScore): Boolean = automatic?.candidate?.let { sameCandidate(it, row.candidate) } == true
+    fun isApplied(row: CandidateScore): Boolean = applied?.candidate?.let { sameCandidate(it, row.candidate) } == true
+    val selectedIsApplied: Boolean get() = selected?.let(::isApplied) == true
 }

@@ -6,7 +6,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -19,21 +18,22 @@ import io.github.solitaire.spwlyrics.integration.composeui.*
 import io.github.solitaire.spwlyrics.integration.workspace.*
 
 @Composable
-internal fun ManualCandidateList(state: ManualSearchState, select: (CandidateScore) -> Unit, modifier: Modifier) {
-    var sort by rememberSaveable { mutableStateOf(CandidateColumn.PREFERENCE) }
-    val rows = remember(state.candidates, sort) {
-        if (sort == CandidateColumn.PREFERENCE) state.candidates else state.candidates.sortedWith(if (sort == CandidateColumn.SCORE) sort.comparator().reversed() else sort.comparator())
+internal fun ManualCandidateList(state: ManualSearchState, select: (CandidateScore) -> Unit, selectSort: (CandidateColumn) -> Unit, modifier: Modifier) {
+    val sort = state.sort
+    val rows = remember(state.candidates, state.automatic, state.applied, sort) {
+        sort.rows(state.candidates, state.automatic, state.applied)
     }
     val list = rememberLazyListState()
     val focus = remember { FocusRequester() }
-    val selectedIndex = rows.indexOf(state.selected)
+    val selectedIndex = rows.indexOfFirst { row -> state.selected?.let { sameCandidate(it.candidate, row.candidate) } == true }
     LaunchedEffect(state.selected, rows) {
         if (selectedIndex >= 0 && list.layoutInfo.visibleItemsInfo.none { it.index == selectedIndex }) list.animateScrollToItem(selectedIndex)
     }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("搜索结果  ${rows.size}", Modifier.weight(1f), color = SaltTheme.colors.subText, style = SaltTheme.textStyles.sub)
-            LyricsMenu("排序：${sort.title}", CandidateColumn.entries.toList(), sort, { it.title }, { sort = it })
+            Text("搜索结果  ${rows.size}" + if (state.matchingAutomatic) " · 正在自动搜索…" else "",
+                Modifier.weight(1f), color = SaltTheme.colors.subText, style = SaltTheme.textStyles.sub)
+            LyricsMenu("排序：${sort.title}", CandidateColumn.entries.toList(), sort, { it.title }, selectSort)
         }
         LyricsSection(Modifier.weight(1f)) {
             Box(Modifier.fillMaxSize().focusRequester(focus).onPreviewKeyEvent { event ->
@@ -49,13 +49,16 @@ internal fun ManualCandidateList(state: ManualSearchState, select: (CandidateSco
                 }
             }.focusable()) {
                 when {
-                    state.searching || state.readingTrack -> EmptyWorkspace("正在查找歌词", loading = true)
+                    state.readingTrack || rows.isEmpty() && (state.searching || state.matchingAutomatic) -> EmptyWorkspace("正在查找歌词", loading = true)
                     rows.isEmpty() -> EmptyWorkspace(if (state.searched) "没有找到相关歌词" else "搜索你正在听的歌",
                         if (state.searched) "缩短关键词，或选择其他来源重试" else "选择结果后即可预览、应用或写入歌曲")
                     else -> {
                         LazyColumn(Modifier.fillMaxSize().padding(end = 10.dp), state = list, contentPadding = PaddingValues(4.dp)) {
                             items(rows) { row ->
-                                ManualCandidateRow(row, row == state.selected, !state.mutating) { focus.requestFocus(); select(row) }
+                                ManualCandidateRow(row, row == rows.getOrNull(selectedIndex), !state.mutating,
+                                    automatic = state.isAutomatic(row), applied = state.isApplied(row)) {
+                                    focus.requestFocus(); select(row)
+                                }
                                 LyricsListDivider()
                             }
                         }

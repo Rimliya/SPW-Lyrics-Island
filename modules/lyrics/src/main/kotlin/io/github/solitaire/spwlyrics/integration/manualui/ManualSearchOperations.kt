@@ -11,9 +11,15 @@ import io.github.solitaire.spwlyrics.domain.ProviderSearchStatus
 /** Keeps the window independent of host APIs, cache storage, and matching rules. */
 internal interface ManualSearchOperations {
     fun currentQuery(): TrackQuery?
+    fun candidateSort(): String = "PREFERENCE"
+    fun saveCandidateSort(value: String): Boolean = true
+    fun searchSource(): String? = null
+    fun saveSearchSource(value: String?): Boolean = true
+    fun applied(query: TrackQuery): LyricsCandidate?
     fun search(query: TrackQuery, keywords: String, source: LyricsSource?,
         onStatus: (ProviderSearchStatus) -> Unit): List<CandidateScore>
     fun preview(candidate: LyricsCandidate): ResolvedLyrics?
+    fun automatic(query: TrackQuery): ResolvedLyrics?
     fun apply(query: TrackQuery, candidate: LyricsCandidate): Boolean
     fun useLocal(query: TrackQuery): Boolean
     fun useAutomatic(query: TrackQuery): Boolean

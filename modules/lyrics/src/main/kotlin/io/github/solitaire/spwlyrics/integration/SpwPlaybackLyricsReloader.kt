@@ -1,6 +1,7 @@
 package io.github.solitaire.spwlyrics.integration
 
 import com.xuncorp.spw.workshop.api.WorkshopApi
+import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 
@@ -40,7 +41,18 @@ internal class SpwPlaybackLyricsReloader(
                 candidate.parameterTypes.contentEquals(arrayOf(String::class.java)) &&
                 candidate.returnType == Void.TYPE
         } ?: return false
-        return PreparedInvocation(loader, method).also { cached = it }.let { invokeReload(it, mediaId) }
+        val prepared = runCatching {
+            val lock = loader.javaClass.getDeclaredField("lock").let { field ->
+                check(field.trySetAccessible())
+                checkNotNull(field.get(loader))
+            }
+            val generation = loader.javaClass.getDeclaredField("generation").also { field ->
+                check(field.type == Long::class.javaPrimitiveType && field.trySetAccessible())
+            }
+            PreparedInvocation(loader, method, lock, generation)
+        }.getOrNull() ?: return false
+        cached = prepared
+        return invokeReload(prepared, mediaId)
     }
 
     private fun controllerService(): Any? = runCatching {
@@ -52,12 +64,16 @@ internal class SpwPlaybackLyricsReloader(
         field.get(null)
     }.getOrNull()
 
-    // The host schedules the load and rejects IDs that no longer belong to its current song.
+    // Observe the host generation under the same lock so a no-op is not reported as success.
     private fun invokeReload(prepared: PreparedInvocation, mediaId: String): Boolean = runCatching {
-        prepared.method.invoke(prepared.loader, mediaId)
-    }.isSuccess
+        synchronized(prepared.lock) {
+            val before = prepared.generation.getLong(prepared.loader)
+            prepared.method.invoke(prepared.loader, mediaId)
+            prepared.generation.getLong(prepared.loader) != before
+        }
+    }.getOrDefault(false)
 
-    private data class PreparedInvocation(val loader: Any, val method: Method)
+    private data class PreparedInvocation(val loader: Any, val method: Method, val lock: Any, val generation: Field)
 
     companion object {
         private const val PLAYBACK_SERVICE = "com.xuncorp.voxzen.service.PlaybackService"

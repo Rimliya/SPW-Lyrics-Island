@@ -56,7 +56,7 @@ internal class ManualCandidateInspector(
             ?.also { cache(request.candidate, it) }
 
     @Synchronized
-    private fun cache(candidate: LyricsCandidate, document: LyricsDocument) {
+    fun cache(candidate: LyricsCandidate, document: LyricsDocument) {
         documents[cacheKey(candidate)] = document
     }
 

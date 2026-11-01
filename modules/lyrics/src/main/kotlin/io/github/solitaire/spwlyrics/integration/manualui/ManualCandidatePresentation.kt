@@ -1,8 +1,12 @@
 package io.github.solitaire.spwlyrics.integration.manualui
 
 import io.github.solitaire.spwlyrics.domain.CandidateScore
+import io.github.solitaire.spwlyrics.domain.LyricsCandidate
 import io.github.solitaire.spwlyrics.domain.LyricsQuality
 import java.util.Locale
+
+internal fun sameCandidate(left: LyricsCandidate, right: LyricsCandidate): Boolean =
+    left.source == right.source && left.remoteId == right.remoteId
 
 /** Candidate labels and sorting stay independent of matching gates and list layout. */
 internal enum class CandidateColumn(val title: String) {
@@ -28,5 +32,17 @@ internal enum class CandidateColumn(val title: String) {
         SCORE -> compareBy { it.score }
         DURATION -> compareBy { it.candidate.durationMs ?: -1 }
         else -> compareBy { text(it) }
+    }
+
+    /** Applied and automatic results stay pinned in that order across sorting, keywords, and source filtering. */
+    fun rows(candidates: List<CandidateScore>, automatic: CandidateScore?, applied: CandidateScore?): List<CandidateScore> {
+        val pinned = listOfNotNull(applied, automatic).distinctBy { it.candidate.source to it.candidate.remoteId }
+        val manual = candidates.filterNot { row -> pinned.any { sameCandidate(it.candidate, row.candidate) } }
+        val sorted = when (this) {
+            PREFERENCE -> manual
+            SCORE -> manual.sortedWith(comparator().reversed())
+            else -> manual.sortedWith(comparator())
+        }
+        return pinned + sorted
     }
 }

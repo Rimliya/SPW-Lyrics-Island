@@ -27,6 +27,10 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 internal interface MetadataEditorOperations {
+    fun lyricsFormat(): MetadataLyricsFormat = MetadataLyricsFormat.TTML
+    fun saveLyricsFormat(format: MetadataLyricsFormat): Boolean = true
+    fun metadataImportFillMissing(): Boolean = true
+    fun saveMetadataImportFillMissing(value: Boolean): Boolean = true
     fun currentAudioPath(): String?
     fun chooseAudioFile(): Path?
     fun chooseLyricsFile(): Path?
@@ -41,7 +45,7 @@ internal class MetadataEditorController(
     private val operations: MetadataEditorOperations,
     private val artworkImport: OnlineArtworkImport = OnlineArtworkImport(),
 ) : AutoCloseable {
-    var state by mutableStateOf(MetadataEditorState())
+    var state by mutableStateOf(MetadataEditorState(format = operations.lyricsFormat()))
         private set
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "spw-lyrics-metadata").apply { isDaemon = true } }
     private val parser = Executors.newSingleThreadScheduledExecutor { Thread(it, "spw-lyrics-metadata-preview").apply { isDaemon = true } }
@@ -195,7 +199,11 @@ internal class MetadataEditorController(
     }
 
     fun format(format: MetadataLyricsFormat) {
-        if (!state.busy) state = state.copy(format = format)
+        if (closed || state.busy) return
+        state = state.copy(format = format, error = false, status = "写入时将使用 ${format.label}，草稿内容已保留。")
+        runCatching { check(operations.saveLyricsFormat(format)) { "已选择 ${format.label}，但未能记住本次选择，请检查本地数据目录权限。" } }
+            .onFailure { state = state.copy(error = true, status = it.message.orEmpty()) }
+        if (!state.error && state.loaded != null && !state.validating && state.preview != null) convert()
     }
 
     fun convert() {
@@ -231,7 +239,7 @@ internal class MetadataEditorController(
     }
 
     private fun prepareOnlineImport(candidate: io.github.solitaire.spwlyrics.domain.LyricsCandidate, document: LyricsDocument?, format: MetadataLyricsFormat) =
-        artworkImport.prepare(candidate).copy(lyricsText = document?.let { MetadataLyricsExport.encode(it, format) }, lyricsDocument = document)
+        artworkImport.prepare(candidate).copy(fillMissing = operations.metadataImportFillMissing(), lyricsText = document?.let { MetadataLyricsExport.encode(it, format) }, lyricsDocument = document)
 
     fun selectImport(field: AudioMetadataField, selected: Boolean) {
         val pending = state.onlineImport ?: return
@@ -239,7 +247,11 @@ internal class MetadataEditorController(
     }
 
     fun importMode(fillMissing: Boolean) {
-        if (!state.busy) state = state.copy(onlineImport = state.onlineImport?.copy(fillMissing = fillMissing))
+        val pending = state.onlineImport ?: return
+        if (closed || state.busy || pending.fillMissing == fillMissing) return
+        state = state.copy(onlineImport = pending.copy(fillMissing = fillMissing))
+        runCatching { check(operations.saveMetadataImportFillMissing(fillMissing)) { "导入方式已切换，但未能记住本次选择，请检查本地数据目录权限。" } }
+            .onFailure { state = state.copy(error = true, status = it.message.orEmpty()) }
     }
 
     fun selectCoverImport() {

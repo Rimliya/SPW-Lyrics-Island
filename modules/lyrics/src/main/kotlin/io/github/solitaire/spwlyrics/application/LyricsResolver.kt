@@ -166,11 +166,17 @@ class LyricsResolver(
         resolved(FetchedLyrics(candidate, document))
     }
 
+    /** Reuses the resolved automatic document for manual preview and apply. */
+    fun rememberManual(resolved: ResolvedLyrics) {
+        manualCandidateInspector.cache(resolved.candidate, resolved.document)
+    }
+
     fun toCache(resolved: ResolvedLyrics): CachedLyrics = CachedLyrics(
         document = resolved.document,
         encoded = SpwLyricsEncoder.encode(resolved.document),
         savedAtEpochMs = clock.millis(),
         selectionKey = resolved.selectionKey,
+        candidate = resolved.candidate.copy(qualityHint = resolved.document.quality),
     )
 
     private fun search(provider: LyricsProvider, query: TrackQuery, keywords: String): List<LyricsCandidate> =

@@ -48,6 +48,15 @@ class LyricsLoadCoordinator(
 
     fun currentQuery(): TrackQuery? = current.get()
 
+    /** Restores the applied identity and its cached preview without another provider request. */
+    fun manualSelection(query: TrackQuery): LyricsCandidate? {
+        val candidate = cache.getOverride(query)?.takeUnless { it.local }?.candidate ?: return null
+        cache.getLyrics(query)?.takeIf { cached ->
+            cached.candidate?.let { it.source == candidate.source && it.remoteId == candidate.remoteId } == true
+        }?.let { resolver.rememberManual(ResolvedLyrics(candidate, it.document, it.selectionKey)) }
+        return candidate
+    }
+
     fun selectionChanged() {
         synchronized(selectionLock) { tasks.cancelAll() }
         current.get()?.takeUnless(::automaticWasSuperseded)?.let { query ->
@@ -110,6 +119,15 @@ class LyricsLoadCoordinator(
         resolver.searchManual(query, keywords, source, onStatus)
 
     fun preview(candidate: LyricsCandidate): ResolvedLyrics? = resolver.fetchManual(candidate)
+
+    /** Resolves the automatic choice without applying it or replacing a manual selection. */
+    fun previewAutomatic(query: TrackQuery): ResolvedLyrics? {
+        val selectionKey = resolver.selectionKey()
+        val cached = cache.getLyrics(query)?.takeIf { it.selectionKey == selectionKey }
+        val resolved = cached?.candidate?.let { ResolvedLyrics(it, cached.document, cached.selectionKey) }
+            ?: resolver.resolveAutomaticFully(prepareQuery(query))
+        return resolved?.takeIf { it.selectionKey == resolver.selectionKey() }?.also(resolver::rememberManual)
+    }
 
     fun applyManual(query: TrackQuery, candidate: LyricsCandidate): Boolean {
         if (current.get()?.key != query.key) return false
@@ -265,7 +283,7 @@ class LyricsLoadCoordinator(
         localLyrics.get()?.takeIf { it.first == query.key }?.second
 
     private fun resolvedFromCache(query: TrackQuery, cached: CachedLyrics): ResolvedLyrics = ResolvedLyrics(
-        candidate = LyricsCandidate(
+        candidate = cached.candidate ?: LyricsCandidate(
             source = cached.document.source,
             remoteId = "",
             title = query.title,
@@ -275,6 +293,7 @@ class LyricsLoadCoordinator(
             externalIds = query.externalIds,
         ),
         document = cached.document,
+        selectionKey = cached.selectionKey,
     )
 
     private fun recordAutomaticFailure(query: TrackQuery) {

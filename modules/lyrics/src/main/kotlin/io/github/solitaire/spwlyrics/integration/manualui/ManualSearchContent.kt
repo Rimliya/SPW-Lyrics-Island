@@ -27,13 +27,13 @@ internal fun ManualSearchContent(controller: ManualSearchController) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val wide = maxWidth >= 900.dp
             if (wide) Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                ManualCandidateList(state, { controller.select(it); detail = true }, Modifier.weight(1f).fillMaxHeight())
+                ManualCandidateList(state, { controller.select(it); detail = true }, controller::sort, Modifier.weight(1f).fillMaxHeight())
                 ManualPreviewContent(controller, Modifier.weight(1.05f).fillMaxHeight())
             } else Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 LyricsTabs(listOf("搜索结果", "歌词预览"), if (detail) 1 else 0, { detail = it == 1 })
                 LyricsTransition(detail, Modifier.weight(1f).fillMaxWidth()) { preview ->
                     if (preview) ManualPreviewContent(controller, Modifier.fillMaxSize())
-                    else ManualCandidateList(state, { controller.select(it); detail = true }, Modifier.fillMaxSize())
+                    else ManualCandidateList(state, { controller.select(it); detail = true }, controller::sort, Modifier.fillMaxSize())
                 }
             }
         }
@@ -41,7 +41,8 @@ internal fun ManualSearchContent(controller: ManualSearchController) {
             DesktopButton("恢复自动匹配", controller::useAutomatic, enabled = state.canMutate)
             DesktopButton("切回本地歌词", controller::useLocal, enabled = state.canMutate)
             DesktopButton("导入元数据", controller::editMetadata, enabled = !state.busy && state.selected != null)
-            DesktopButton("应用歌词", controller::apply, enabled = state.canMutate && state.document != null,
+            DesktopButton(if (state.selectedIsApplied) "已应用" else "应用歌词", controller::apply,
+                enabled = state.canMutate && state.document != null && !state.selectedIsApplied,
                 primary = true, glyph = DesktopGlyph.Check)
         }
     }
