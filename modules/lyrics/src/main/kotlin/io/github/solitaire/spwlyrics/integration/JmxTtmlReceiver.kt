@@ -42,6 +42,15 @@ internal class JmxTtmlReceiver(
         )
     }
 
+    override fun select(query: TrackQuery, rawTtml: String?, offsetMs: Long): Boolean {
+        if (query.path.isBlank() || state() == null) return false
+        if (server.getMBeanInfo(NAME).operations.any { it.name == "selectLyrics" }) return server.invoke(
+            NAME, "selectLyrics", arrayOf<Any>(query.trackId, query.path, rawTtml.orEmpty(), offsetMs),
+            arrayOf("java.lang.String", "java.lang.String", "java.lang.String", "long"),
+        ) == true
+        return rawTtml != null && submit(query, rawTtml, offsetMs)
+    }
+
     override fun close() {
         if (listening) server.removeNotificationListener(MBeanServerDelegate.DELEGATE_NAME, listener)
         listening = false

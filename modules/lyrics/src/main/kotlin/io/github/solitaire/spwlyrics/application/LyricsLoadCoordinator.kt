@@ -41,6 +41,8 @@ class LyricsLoadCoordinator(
     private val qualityUpgradeAttempts = BackgroundAttemptGate(QUALITY_UPGRADE_RETRY_SECONDS)
     private val notifiedFailures = ConcurrentHashMap.newKeySet<String>()
     private val selectionLock = Any()
+    private var selectionRevision = 0L
+    @Volatile private var closed = false
     private val renderCacheLock = Any()
     private var renderedDocument: LyricsDocument? = null
     private var renderedDelay = Int.MIN_VALUE
@@ -50,7 +52,7 @@ class LyricsLoadCoordinator(
 
     /** Restores the applied identity and its cached preview without another provider request. */
     fun manualSelection(query: TrackQuery): LyricsCandidate? {
-        val candidate = cache.getOverride(query)?.takeUnless { it.local }?.candidate ?: return null
+        val candidate = cache.getSelection(query)?.takeUnless { it.local }?.candidate ?: return null
         cache.getLyrics(query)?.takeIf { cached ->
             cached.candidate?.let { it.source == candidate.source && it.remoteId == candidate.remoteId } == true
         }?.let { resolver.rememberManual(ResolvedLyrics(candidate, it.document, it.selectionKey)) }
@@ -58,6 +60,7 @@ class LyricsLoadCoordinator(
     }
 
     fun selectionChanged() {
+        if (closed) return
         synchronized(selectionLock) { tasks.cancelAll() }
         current.get()?.takeUnless(::automaticWasSuperseded)?.let { query ->
             output?.withdraw(query)
@@ -70,43 +73,47 @@ class LyricsLoadCoordinator(
         phase: LyricsLoadPhase,
         replacementPolicy: AutomaticReplacementPolicy,
         localTtml: (() -> LyricsDocument?)? = null,
+        localEmbedded: (() -> LyricsDocument?)? = null,
     ): String? {
-        if (current.getAndSet(query)?.key != query.key) {
-            tasks.cancelExcept(query.key, upgradeKey(query))
+        synchronized(selectionLock) {
+            if (closed) return null
+            if (current.getAndSet(query)?.key != query.key) {
+                selectionRevision++
+                tasks.cancelExcept(query.key, upgradeKey(query))
+            }
         }
-        val override = cache.getOverride(query)
+        val override = cache.getSelection(query)
         if (override == null && InstrumentalLyrics.isInstrumentalTitle(query.title)) return null
-        var local: LyricsDocument? = null
         if (phase == LyricsLoadPhase.BEFORE_LOCAL) {
-            local = if (override?.candidate == null) localTtml?.invoke() else null
+            val local = when {
+                override?.embedded == true -> localEmbedded?.invoke()
+                override?.candidate == null -> localTtml?.invoke()
+                else -> null
+            }
             localLyrics.set(local?.let { query.key to it })
+            if (local != null) return render(query, local)
         } else if (override?.candidate == null) {
             // Reuse the local TTML document if SPW also invokes its after-missing hook.
             localLyrics.get()?.takeIf { it.first == query.key }?.let { return render(query, it.second) }
         }
-        if (override?.local == true) return null
-        if (local != null && InstrumentalLyrics.isPlaceholder(local)) return render(query, local)
+        if (override?.local == true) return followHost(query)
         val automaticLoadAllowed = replacementPolicy.allowsAutomaticLoad(phase)
-        // Local lyrics stay authoritative unless the policy asks for a verified plugin result.
-        if (local != null && !automaticLoadAllowed) return render(query, local)
-        if (override?.candidate == null && !automaticLoadAllowed) return null
+        if (override?.candidate == null && !automaticLoadAllowed) return followHost(query)
         cache.getLyrics(query)?.takeIf { override?.candidate != null || it.selectionKey == resolver.selectionKey() }?.let { cached ->
             notifiedFailures.remove(query.key)
-            if (InstrumentalLyrics.isPlaceholder(cached.document)) {
-                return render(query, cached.document, cached.encoded)
-            }
             if (override?.candidate == null && !tasks.contains(query.key)) {
                 startQualityUpgradeIfNeeded(query, resolvedFromCache(query, cached))
             }
             return render(query, cached.document, cached.encoded)
         }
         startLoad(query, override?.candidate)
-        return local?.let { render(query, it) }
+        return followHost(query)
     }
 
     /** Warms disk entries and shares an unfinished speculative search with later playback. */
     fun precache(query: TrackQuery, hasLocalLyrics: Boolean = false, reference: LyricsDocument? = null): Future<*>? {
-        val override = cache.getOverride(query)
+        if (closed) return null
+        val override = cache.getSelection(query)
         if (override?.local == true) return null
         if (override?.candidate == null && hasLocalLyrics) return null
         if (override == null && InstrumentalLyrics.isInstrumentalTitle(query.title)) return null
@@ -130,15 +137,19 @@ class LyricsLoadCoordinator(
     }
 
     fun applyManual(query: TrackQuery, candidate: LyricsCandidate): Boolean {
-        if (current.get()?.key != query.key) return false
+        val expectedRevision = synchronized(selectionLock) {
+            if (closed || current.get()?.key != query.key) return false
+            ++selectionRevision
+        }
         tasks.cancel(upgradeKey(query))
         val resolved = resolver.fetchManual(candidate) ?: return false
         val cached = resolver.toCache(resolved)
         synchronized(selectionLock) {
-            if (current.get()?.key != query.key) return false
+            if (closed || current.get()?.key != query.key || selectionRevision != expectedRevision) return false
             tasks.cancel(query.key)
             tasks.cancel(upgradeKey(query))
             cache.putOverride(query, ManualOverride(local = false, source = candidate.source, candidate = candidate))
+            cache.clearSavedLyrics(query)
             cache.putLyrics(query, cached)
             offer(query, resolved.document)
             notifiedFailures.remove(query.key)
@@ -151,11 +162,13 @@ class LyricsLoadCoordinator(
         if (current.get()?.key != query.key) return false
         synchronized(selectionLock) {
             if (current.get()?.key != query.key) return false
+            selectionRevision++
             tasks.cancel(query.key)
             tasks.cancel(upgradeKey(query))
             cache.putOverride(query, ManualOverride(local = true))
+            cache.clearSavedLyrics(query)
             notifiedFailures.remove(query.key)
-            output?.withdraw(query)
+            output?.followHost(query)
             refreshOrNotify(query)
         }
         return true
@@ -164,7 +177,7 @@ class LyricsLoadCoordinator(
     /** True when the current track is showing an automatically fetched karaoke document. */
     fun canDisableCurrentLyrics(query: TrackQuery): Boolean {
         if (current.get()?.key != query.key) return false
-        val override = cache.getOverride(query)
+        val override = cache.getSelection(query)
         if (override?.local == true || override?.candidate != null) return false
         val cached = cache.getLyrics(query) ?: return false
         return cached.document.lines.any { it.words.isNotEmpty() }
@@ -177,16 +190,42 @@ class LyricsLoadCoordinator(
         if (current.get()?.key != query.key) return false
         synchronized(selectionLock) {
             if (current.get()?.key != query.key) return false
+            selectionRevision++
             tasks.cancel(query.key)
             tasks.cancel(upgradeKey(query))
             qualityUpgradeAttempts.clear(query.key)
             cache.removeOverride(query)
+            cache.clearSavedLyrics(query)
             cache.removeLyrics(query)
             output?.withdraw(query)
             notifiedFailures.remove(query.key)
             startLoad(query, null)
         }
         return true
+    }
+
+    /** Explicit lyric writes select the saved embedded text, including LRC and an empty lyric. */
+    fun savedLyrics(query: TrackQuery) {
+        synchronized(selectionLock) {
+            if (closed) return
+            // A path-only record survives a later library rescan that changes title/artist tags.
+            cache.selectSavedLyrics(query)
+            tasks.cancel(query.key)
+            tasks.cancel(upgradeKey(query))
+            current.get()?.takeIf { it.path == query.path }?.let { active ->
+                selectionRevision++
+                tasks.cancel(active.key)
+                tasks.cancel(upgradeKey(active))
+                localLyrics.set(null)
+                output?.withdraw(active)
+                refreshOrNotify(active)
+            }
+        }
+    }
+
+    private fun followHost(query: TrackQuery): String? {
+        output?.followHost(query)
+        return null
     }
 
     fun setDelay(query: TrackQuery, delayMs: Int): Boolean {
@@ -227,7 +266,7 @@ class LyricsLoadCoordinator(
                     val fetched = resolver.fetchManual(manual) ?: return@start
                     val cached = resolver.toCache(fetched)
                     synchronized(selectionLock) {
-                        if (!isActive() || cache.getOverride(query)?.candidate != manual) return@start
+                        if (!isActive() || cache.getSelection(query)?.candidate != manual) return@start
                         cache.putLyrics(query, cached)
                         notifiedFailures.remove(query.key)
                         if (current.get()?.key == query.key) {
@@ -302,7 +341,7 @@ class LyricsLoadCoordinator(
     }
 
     private fun automaticWasSuperseded(query: TrackQuery): Boolean =
-        cache.getOverride(query)?.let { it.local || it.candidate != null } == true
+        cache.getSelection(query)?.let { it.local || it.candidate != null } == true
 
     private fun notifyAutomaticFailure(query: TrackQuery) {
         if (current.get()?.key == query.key && notifiedFailures.add(query.key)) {
@@ -336,7 +375,10 @@ class LyricsLoadCoordinator(
     }
 
     override fun close() {
-        current.set(null)
+        synchronized(selectionLock) {
+            closed = true
+            current.set(null)
+        }
         localLyrics.set(null)
         synchronized(renderCacheLock) {
             renderedDocument = null

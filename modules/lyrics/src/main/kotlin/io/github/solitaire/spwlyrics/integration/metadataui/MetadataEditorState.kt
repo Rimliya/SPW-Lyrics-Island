@@ -14,6 +14,7 @@ internal data class MetadataEditorState(
     val onlineImport: io.github.solitaire.spwlyrics.domain.OnlineMetadataImport? = null,
     val draft: AudioMetadata = AudioMetadata(),
     val format: MetadataLyricsFormat = MetadataLyricsFormat.TTML,
+    val importOnlyMissing: Boolean = true,
     val sourceDocument: LyricsDocument? = null,
     val preview: LyricsDocument? = null,
     val structured: EditableLyrics? = null,

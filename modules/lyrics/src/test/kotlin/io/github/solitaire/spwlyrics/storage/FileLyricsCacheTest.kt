@@ -9,6 +9,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -67,3 +68,20 @@ class FileLyricsCacheTest {
         lines = listOf(LyricLine(startMs = 0, endMs = 1_000, text = "test")),
     )
 }
+
+    @Test
+    fun savedEmbeddedSelectionSurvivesMetadataRescan() {
+        val root = Files.createTempDirectory("spw-lyrics-selection")
+        try {
+            val cache = FileLyricsCache(root)
+            val original = TrackQuery("Old Title", listOf("Old Artist"), "Album", path = "D:\\music\\song.flac")
+            val rescanned = original.copy(title = "New Title", artists = listOf("New Artist"))
+            cache.selectSavedLyrics(original)
+
+            assertTrue(cache.getSelection(rescanned)?.embedded == true)
+            cache.clearSavedLyrics(rescanned)
+            assertNull(cache.getSelection(rescanned))
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }

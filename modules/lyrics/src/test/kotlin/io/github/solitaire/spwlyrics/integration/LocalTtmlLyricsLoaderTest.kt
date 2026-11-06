@@ -4,6 +4,7 @@ import io.github.solitaire.spwlyrics.domain.InstrumentalLyrics
 import java.nio.file.Files
 import kotlin.io.path.writeText
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -25,3 +26,24 @@ class LocalTtmlLyricsLoaderTest {
         }
     }
 }
+
+    @Test
+    fun embeddedOnlyIgnoresSidecarAndInvalidatesCache() {
+        val directory = Files.createTempDirectory("spw-lyrics-embedded")
+        try {
+            val audio = directory.resolve("song.wav")
+            Files.write(audio, ByteArray(0))
+            directory.resolve("song.lrc").writeText("[00:00.00]sidecar")
+            var embedded = "[00:00.00]embedded one"
+            val loader = LocalTtmlLyricsLoader(readEmbedded = { embedded })
+
+            assertEquals("sidecar", loader.load(audio.toString())?.lines?.single()?.text)
+            assertEquals("embedded one", loader.loadEmbedded(audio.toString())?.lines?.single()?.text)
+
+            embedded = "[00:00.00]embedded two"
+            loader.invalidate(audio.toString())
+            assertEquals("embedded two", loader.loadEmbedded(audio.toString())?.lines?.single()?.text)
+        } finally {
+            directory.toFile().deleteRecursively()
+        }
+    }

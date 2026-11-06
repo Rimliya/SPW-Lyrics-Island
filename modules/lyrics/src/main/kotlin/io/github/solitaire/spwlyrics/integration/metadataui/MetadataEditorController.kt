@@ -35,7 +35,7 @@ internal interface MetadataEditorOperations {
     fun chooseAudioFile(): Path?
     fun chooseLyricsFile(): Path?
     fun chooseCoverFile(): Path?
-    fun afterSave(path: Path)
+    fun afterSave(snapshot: AudioMetadataSnapshot, lyricsChanged: Boolean)
     fun openSearch(query: TrackQuery)
 }
 
@@ -45,7 +45,8 @@ internal class MetadataEditorController(
     private val operations: MetadataEditorOperations,
     private val artworkImport: OnlineArtworkImport = OnlineArtworkImport(),
 ) : AutoCloseable {
-    var state by mutableStateOf(MetadataEditorState(format = operations.lyricsFormat()))
+    var state by mutableStateOf(MetadataEditorState(format = operations.lyricsFormat(),
+        importOnlyMissing = operations.metadataImportFillMissing()))
         private set
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "spw-lyrics-metadata").apply { isDaemon = true } }
     private val parser = Executors.newSingleThreadScheduledExecutor { Thread(it, "spw-lyrics-metadata-preview").apply { isDaemon = true } }
@@ -223,34 +224,41 @@ internal class MetadataEditorController(
         } == true
         if (preserveDraft && sameFile) {
             val format = state.format
-            run({ prepareOnlineImport(candidate, document, format) }, { pending ->
-                state = state.copy(onlineImport = pending, status = "已读取在线信息、封面与可用歌词，原草稿已保留。请勾选并应用。")
+            run({ prepareOnlineImport(candidate, document, format) }, { prepared ->
+                val pending = prepared.selectFor(state.draft, state.importOnlyMissing)
+                state = state.copy(onlineImport = pending, status = "已读取在线信息、封面与可用歌词。请核对勾选项后应用。")
             })
         } else requestDiscard { loadSearch(query, candidate, document) }
     }
 
     private fun loadSearch(query: TrackQuery, candidate: io.github.solitaire.spwlyrics.domain.LyricsCandidate, document: LyricsDocument?) {
         val format = state.format
-        run({ store.read(Path.of(query.path)) to prepareOnlineImport(candidate, document, format) }, { (snapshot, pending) ->
+        run({ store.read(Path.of(query.path)) to prepareOnlineImport(candidate, document, format) }, { (snapshot, prepared) ->
             loaded(snapshot)
+            val pending = prepared.selectFor(state.draft, state.importOnlyMissing)
             state = state.copy(format = format, onlineImport = pending,
-                status = "已读取在线信息。请勾选字段、封面或歌词并应用到草稿；核对后写入歌曲文件。")
+                status = "已读取在线信息。请核对候选和当前草稿，选择要替换的内容。")
         })
     }
 
     private fun prepareOnlineImport(candidate: io.github.solitaire.spwlyrics.domain.LyricsCandidate, document: LyricsDocument?, format: MetadataLyricsFormat) =
-        artworkImport.prepare(candidate).copy(fillMissing = operations.metadataImportFillMissing(), lyricsText = document?.let { MetadataLyricsExport.encode(it, format) }, lyricsDocument = document)
+        artworkImport.prepare(candidate).copy(
+            lyricsText = document?.let { MetadataLyricsExport.encode(it, format) },
+            lyricsDocument = document,
+            lyricsMainAgent = document?.let(io.github.solitaire.spwlyrics.codec.TtmlVocalParts::mainAgent) ?: "v1",
+        )
 
     fun selectImport(field: AudioMetadataField, selected: Boolean) {
         val pending = state.onlineImport ?: return
         if (!state.busy) state = state.copy(onlineImport = pending.copy(selected = if (selected) pending.selected + field else pending.selected - field))
     }
 
-    fun importMode(fillMissing: Boolean) {
+    fun selectImportPreset(onlyMissing: Boolean) {
         val pending = state.onlineImport ?: return
-        if (closed || state.busy || pending.fillMissing == fillMissing) return
-        state = state.copy(onlineImport = pending.copy(fillMissing = fillMissing))
-        runCatching { check(operations.saveMetadataImportFillMissing(fillMissing)) { "导入方式已切换，但未能记住本次选择，请检查本地数据目录权限。" } }
+        if (closed || state.busy) return
+        state = state.copy(onlineImport = pending.selectFor(state.draft, onlyMissing), importOnlyMissing = onlyMissing,
+            error = false, status = if (onlyMissing) "已勾选可补充的空缺项。" else "已勾选全部可用替换项。")
+        runCatching { check(operations.saveMetadataImportFillMissing(onlyMissing)) { "导入方式已切换，但未能记住本次选择，请检查本地数据目录权限。" } }
             .onFailure { state = state.copy(error = true, status = it.message.orEmpty()) }
     }
 
@@ -290,12 +298,17 @@ internal class MetadataEditorController(
 
     fun applyImport() {
         val pending = state.onlineImport ?: return
-        if (state.busy || state.loaded == null) return
+        if (closed || state.busy || state.loaded == null || !pending.hasSelection) return
         val updated = pending.apply(state.draft)
-        val replacingLyrics = pending.lyricsSelected && pending.lyricsText != null && (!pending.fillMissing || state.draft.lyrics.isBlank())
+        val replacingLyrics = pending.lyricsSelected && !pending.lyricsText.isNullOrBlank() && updated.lyrics != state.draft.lyrics
         if (replacingLyrics) lyrics(updated.lyrics)
-        state = state.copy(draft = updated, sourceDocument = if (replacingLyrics) pending.lyricsDocument else state.sourceDocument, error = false,
-            status = "所选字段、封面和歌词已按导入模式应用到草稿。请核对后写入歌曲文件。")
+        state = state.copy(
+            draft = updated,
+            sourceDocument = if (replacingLyrics) pending.lyricsDocument else state.sourceDocument,
+            onlineImport = null,
+            error = false,
+            status = "所选内容已应用到草稿。请核对后写入歌曲文件。",
+        )
     }
 
     fun openSearch() {
@@ -324,8 +337,9 @@ internal class MetadataEditorController(
             if (edited.lyrics.isNotBlank() && edited.lyrics != original.metadata.lyrics) MetadataLyricsImport.preview(edited.lyrics)
             store.save(original, edited)
         }, { saved ->
+            val lyricsChanged = saved.snapshot.metadata.lyrics != original.metadata.lyrics
             loaded(saved.snapshot)
-            val refresh = runCatching { operations.afterSave(saved.snapshot.path) }.isSuccess
+            val refresh = runCatching { operations.afterSave(saved.snapshot, lyricsChanged) }.isSuccess
             state = state.copy(status = "已写入。" +
                 (if (refresh) "歌曲信息可重新扫描曲库后更新。" else "请切歌后重试歌词显示，并重新扫描曲库更新歌曲信息。") + saved.notice)
         })

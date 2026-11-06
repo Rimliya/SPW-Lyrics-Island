@@ -141,6 +141,19 @@ object PluginRuntime {
             if (error is PluginPermissionDeniedException) "请在 SPW 的插件权限中授予曲库读取权限后重试。"
             else "批量处理失败：${error.message ?: "未知错误"}"
         }
+        val afterMetadataSaved: (io.github.solitaire.spwlyrics.storage.AudioMetadataSnapshot, Boolean) -> Unit = { snapshot, lyricsChanged ->
+            val path = snapshot.path
+            val current = currentQuery()
+            val isCurrent = current != null && runCatching { java.nio.file.Path.of(current.path).toRealPath() == path }.getOrDefault(false)
+            localTtmlLyrics.invalidate(path.toString())
+            if (lyricsChanged) {
+                val query = if (isCurrent) current else TrackQuery("", emptyList(), "", path = path.toString())
+                coordinator?.savedLyrics(query)
+                java.awt.EventQueue.invokeLater { workspace?.session?.manual?.localLyricsSaved(query.path) }
+            } else if (isCurrent) {
+                check(refreshBridge.reloadCurrentLyrics()) { "请切换歌曲后重新播放以加载内嵌歌词。" }
+            }
+        }
         val metadataOperations = object : MetadataEditorOperations {
             override fun lyricsFormat() = MetadataLyricsFormat.fromStorageValue(uiState.lyricsFormat())
             override fun saveLyricsFormat(format: MetadataLyricsFormat) = uiState.rememberLyricsFormat(format.name)
@@ -151,12 +164,8 @@ object PluginRuntime {
             override fun chooseLyricsFile() = MetadataFilePicker.lyrics()
             override fun chooseCoverFile() = MetadataFilePicker.cover()
             override fun openSearch(query: TrackQuery) { workspace?.searchMetadata(query) }
-            override fun afterSave(path: java.nio.file.Path) {
-                val currentPath = WorkshopApi.playback.getCurrentMediaItem()?.path
-                if (currentPath != null && runCatching { java.nio.file.Path.of(currentPath).toRealPath() == path }.getOrDefault(false)) {
-                    check(refreshBridge.reloadCurrentLyrics()) { "请切换歌曲后重新播放以加载内嵌歌词。" }
-                }
-            }
+            override fun afterSave(snapshot: io.github.solitaire.spwlyrics.storage.AudioMetadataSnapshot, lyricsChanged: Boolean) =
+                afterMetadataSaved(snapshot, lyricsChanged)
         }
         val manualOperations = object : ManualSearchOperations {
             override fun candidateSort() = uiState.candidateSort()
@@ -341,6 +350,7 @@ object PluginRuntime {
             phase,
             settings?.automaticReplacementPolicy() ?: AutomaticReplacementPolicy.ALWAYS,
             localTtml,
+            { localTtmlLyrics.loadEmbedded(mediaItem.path) },
         )
         if (phase == LyricsLoadPhase.BEFORE_LOCAL) startupRecovery?.beforeLoadCompleted(query)
         precache?.trackChanged(query)
