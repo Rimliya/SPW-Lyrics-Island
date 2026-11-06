@@ -25,6 +25,7 @@ internal class IslandGpuRenderer(private val owner: Window, private val surface:
     private var layer: SkiaLayer? = null
     private var input: IslandGpuInput? = null
     private var nativeInput: WindowsGpuInput? = null
+    private var inputSuppressed = false
     private var backdrop: WindowsDesktopBackdrop? = null
     private var textureImport: WindowsGpuTextureImport? = null
     private val requiredRenderApi = if (Platform.isWindows()) GraphicsApi.DIRECT3D else GraphicsApi.OPENGL
@@ -125,11 +126,12 @@ internal class IslandGpuRenderer(private val owner: Window, private val surface:
             if (owner.isDisplayable && current.isDisplayable) {
                 val settings = surface.island.settings
                 val scale = owner.graphicsConfiguration.defaultTransform
-                input?.setInteractive(surface.hoverPose.fullyShown)
+                input?.setInteractive(!inputSuppressed && surface.hoverPose.fullyShown)
                 nativeInput?.update(listOf(surface.island.bounds, settings.notch,
                     settings.cornerRoundness, scale.scaleX, scale.scaleY),
-                    settings.clickThrough || settings.autoHideOnHover || !surface.hoverPose.fullyShown, surface::inputRegion)
-                if (Platform.isWindows() && settings.backgroundStyle == IslandBackgroundStyle.LIQUID_GLASS &&
+                    inputSuppressed || settings.clickThrough || settings.autoHideOnHover ||
+                        !surface.hoverPose.fullyShown, surface::inputRegion)
+                if (!inputSuppressed && Platform.isWindows() && settings.backgroundStyle == IslandBackgroundStyle.LIQUID_GLASS &&
                     !settings.lowPerformance && owner.isVisible && scene?.glassFailure == null) {
                     val source = backdrop ?: WindowsDesktopBackdrop(report, textureImport) {
                         try {
@@ -181,6 +183,18 @@ internal class IslandGpuRenderer(private val owner: Window, private val surface:
         previous?.let { if (it.isDisplayable && it.parent != null) surface.remove(it)
             else { if (it.parent != null) surface.remove(it); it.detach() } }
         textureImport = null
+    }
+
+    /** Suspend input and desktop capture before the policy collapse paints its last frame. */
+    fun suppressInput(value: Boolean) {
+        if (inputSuppressed == value) return
+        inputSuppressed = value
+        if (value) {
+            input?.setInteractive(false)
+            nativeInput?.hide()
+            backdrop?.close()
+            backdrop = null
+        }
     }
 
     override fun close() { owner.removeComponentListener(visibility); release() }

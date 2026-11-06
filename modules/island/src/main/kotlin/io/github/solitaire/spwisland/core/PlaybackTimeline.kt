@@ -14,6 +14,7 @@ class PlaybackTimeline(private val nanoTime: () -> Long = System::nanoTime) : Pl
     private var callbackLyrics = LyricsDocument.EMPTY
     private var documentLyrics = LyricsDocument.EMPTY
     private var mergedLyrics = LyricsDocument.EMPTY
+    private var hasLyricsSnapshot = false
     private var position = 0L
     private var anchor = nanoTime()
     private var playing = false
@@ -37,6 +38,7 @@ class PlaybackTimeline(private val nanoTime: () -> Long = System::nanoTime) : Pl
             callbackLyrics = LyricsDocument.EMPTY
             documentLyrics = LyricsDocument.EMPTY
             mergedLyrics = LyricsDocument.EMPTY
+            hasLyricsSnapshot = false
             position = 0
             anchor = nanoTime()
             pendingSeek = null
@@ -66,17 +68,19 @@ class PlaybackTimeline(private val nanoTime: () -> Long = System::nanoTime) : Pl
     @Synchronized fun lineChanged(value: LyricLine?) {
         // Null/blank callbacks mark instrumental gaps, not a request to erase the last lyric.
         if (value != null && value.text.isNotBlank()) {
-            line = value
+            // A full reload replaces the source. Late rows from the previous source cannot join it.
+            val active = if (hasLyricsSnapshot) documentLyrics.canonical(value) ?: return else value
+            line = active
             // Public callbacks already carry start/end time. Retaining emitted lines is enough to
             // reconstruct overlaps while the host's full snapshot is loading.
-            val updated = callbackLyrics.withUpdates(listOf(value))
+            val updated = if (hasLyricsSnapshot) callbackLyrics else callbackLyrics.withUpdates(listOf(active))
             if (updated !== callbackLyrics) {
                 callbackLyrics = updated
                 mergedLyrics = if (documentLyrics.lines.isEmpty()) updated
-                    else documentLyrics.withUpdates(listOf(value))
+                    else documentLyrics.withUpdates(listOf(active))
             }
             if (awaitingPausedSeekLine) {
-                pausedPresentation = PausedPresentation(track, value,
+                pausedPresentation = PausedPresentation(track, active,
                     pausedPresentation?.positionMs ?: position, mergedLyrics)
                 awaitingPausedSeekLine = false
             }
@@ -90,6 +94,7 @@ class PlaybackTimeline(private val nanoTime: () -> Long = System::nanoTime) : Pl
             if (status == PlaybackStatus.ENDED) return
             // Every full snapshot is authoritative, including empty reload/clear notifications.
             callbackLyrics = LyricsDocument.EMPTY
+            hasLyricsSnapshot = true
             documentLyrics = document
             mergedLyrics = document
             val paused = pausedPresentation
@@ -161,6 +166,7 @@ class PlaybackTimeline(private val nanoTime: () -> Long = System::nanoTime) : Pl
             callbackLyrics = LyricsDocument.EMPTY
             documentLyrics = LyricsDocument.EMPTY
             mergedLyrics = LyricsDocument.EMPTY
+            hasLyricsSnapshot = false
             pendingSeek = null
             pausedPresentation = null
             awaitingPausedSeekLine = false

@@ -9,6 +9,8 @@ internal class LyricsDocument private constructor(val lines: List<LyricLine>) {
     }
     val usesWordTiming: Boolean by lazy { lines.any { it.hasWordTimingEvidence } }
 
+    fun canonical(line: LyricLine): LyricLine? = byKey[Key(line.startMs, line.endMs, line.text)]
+
     fun lastStarted(position: Long): LyricLine? {
         var low = 0
         var high = lines.size

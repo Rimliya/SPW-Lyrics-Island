@@ -7,6 +7,7 @@ import io.github.solitaire.spwisland.diagnostics.DiagnosticExecutors
 import com.sun.jna.Platform
 import io.github.solitaire.spwisland.core.*
 import io.github.solitaire.spwisland.platform.WindowsOverlay
+import io.github.solitaire.spwisland.platform.WindowsSystemUi
 import io.github.solitaire.spwisland.platform.X11InputRegion
 import io.github.solitaire.spwisland.platform.LinuxGlobalPointer
 import java.awt.*
@@ -61,6 +62,15 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
     // Independent OBS output: its own collapsed panel, unaffected by desktop visibility or hover state.
     private val spout = if (Platform.isWindows()) SpoutOutput(report) else null
     private val surface = IslandSurface(panel)
+    private val systemUi = if (Platform.isWindows()) {
+        IslandLog.attempt("IslandWindow", "system_ui.initialize_failed") {
+            WindowsSystemUi {
+                SwingUtilities.invokeLater {
+                    IslandLog.guard("IslandWindow", "system_ui.changed") { if (!closed) tick() }
+                }
+            }
+        }.onFailure(report).getOrNull()
+    } else null
     private val renderer = IslandGpuRenderer(window, surface, report)
     private val hoverVisibility = IslandHoverVisibility()
     private val expandedMotion = IslandExpandedMotion()
@@ -222,10 +232,12 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
         val dt = ((now - lastFrame) / 1_000_000_000.0).coerceIn(0.0, .1)
         lastFrame = now
         val performance = settings.performance
+        systemUi?.update(settings.enabled, performance)
         diagnostics.tick(performance)
         val clickThrough = (settings.clickThrough || settings.autoHideOnHover) &&
             (native.supportsClickThrough || inputRegion != null)
         val snap = timeline.snapshot()
+        val systemHidden = systemUi?.hiddenReason
         if (settings.enabled && nativeAvailable && now >= nextScreenCheck) {
             try { fullscreen = settings.hideFullscreen && native.foregroundIsFullscreen(window) }
             catch (error: Exception) {
@@ -233,9 +245,11 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
             nextScreenCheck = now + performance.screenCheckIntervalNs
         }
         val paused = settings.hidePaused && !snap.playing
+        val showContent = !paused && systemHidden == null
         val visible = settings.enabled && (!settings.hideFullscreen || !fullscreen) &&
-            hoverVisibility.shouldRender(!paused, window.isVisible, performance.animateLayout)
-        globalPointer?.setEnabled(clickThrough && settings.autoHideOnHover && visible && !paused)
+            hoverVisibility.shouldRender(showContent, window.isVisible, performance.animateLayout)
+        renderer.suppressInput(!showContent)
+        globalPointer?.setEnabled(clickThrough && settings.autoHideOnHover && visible && showContent)
         val levels = if (!snap.playing || !settings.showsSpectrum) FloatArray(4)
             else when (performance.spectrumMode) {
                 SpectrumMode.LIVE -> if (spectrumFallback()) SyntheticSpectrum.levels(snap.positionMs) else spectrum()
@@ -259,7 +273,7 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
             surface.clearGpuFrame()
             // Keep a paused reveal at zero so playback resumes through the same motion.
             // Other policies retain their immediate native hide/show behavior.
-            hoverVisibility.update(false, null, Rectangle(), dt, true, settings.notch, show = !paused)
+            hoverVisibility.update(false, null, Rectangle(), dt, true, settings.notch, show = showContent)
             hoverActive = false
             pointerPresence?.reset()
             nextTopmostCheck = 0
@@ -267,6 +281,7 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
             fullscreenHidden = settings.enabled && settings.hideFullscreen && fullscreen
             diagnostics.sample(window, when {
                 !settings.enabled -> "disabled"
+                systemHidden != null -> systemHidden
                 settings.hidePaused && !snap.playing -> "paused"
                 else -> "fullscreen"
             }, performance, presentedFrames, renderer.rendererInfo)
@@ -563,6 +578,7 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
             try { action() } catch (error: Throwable) { IslandLog.failure("window", "release.$name.failed", error) }
         }
         release("scheduler") { frameScheduler.shutdownNow() }
+        release("systemUi") { systemUi?.close() }
         release("diagnostics") { diagnostics.close() }
         release("renderer") { renderer.close() }
         release("spout") { spout?.close() }
