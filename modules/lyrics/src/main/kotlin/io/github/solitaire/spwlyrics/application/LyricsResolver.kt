@@ -14,6 +14,7 @@ import io.github.solitaire.spwlyrics.domain.ProviderSearchStatus
 import io.github.solitaire.spwlyrics.domain.LyricsPreferences
 import io.github.solitaire.spwlyrics.provider.LyricsProvider
 import io.github.solitaire.spwlyrics.storage.CachedLyrics
+import io.github.solitaire.spwlyrics.storage.LyricsCacheValidation
 import java.time.Clock
 import java.util.concurrent.TimeUnit
 
@@ -21,6 +22,7 @@ data class ResolvedLyrics(
     val candidate: LyricsCandidate,
     val document: LyricsDocument,
     val selectionKey: String = "",
+    val validation: LyricsCacheValidation? = null,
 )
 
 internal data class FetchedLyrics(
@@ -102,6 +104,7 @@ class LyricsResolver(
             .mapNotNull(providers::get)
             .filter { provider -> provider.configurationStatus() == null }
         val preparedReference = LyricsSimilarity.prepare(reference)
+        val validation = LyricsCacheValidation.current(reference, similarity)
         onProgress(LyricsResolutionProgress(LyricsResolutionStage.SEARCHING, 0.04, "开始并行搜索 ${selected.size} 个歌词来源"))
         val completed = taskPool.collectProgressively(
             tasks = selected.map { provider ->
@@ -138,9 +141,9 @@ class LyricsResolver(
                 )
             },
         ) { snapshot ->
-            selectResolved(snapshot, order)?.let(onSnapshot)
+            selectResolved(snapshot, order)?.copy(validation = validation)?.let(onSnapshot)
         }
-        val resolved = selectResolved(completed, order)
+        val resolved = selectResolved(completed, order)?.copy(validation = validation)
         onProgress(
             LyricsResolutionProgress(
                 LyricsResolutionStage.SELECTING,
@@ -177,7 +180,17 @@ class LyricsResolver(
         savedAtEpochMs = clock.millis(),
         selectionKey = resolved.selectionKey,
         candidate = resolved.candidate.copy(qualityHint = resolved.document.quality),
+        validation = resolved.validation,
     )
+
+    /** Old entries are rechecked once; manual selections bypass this automatic policy. */
+    internal fun revalidateCached(cached: CachedLyrics, reference: LyricsDocument?, similarity: LyricsSimilarity.Level): CachedLyrics? {
+        if (cached.selectionKey != selectionKey()) return null
+        val current = LyricsCacheValidation.current(reference, similarity)
+        if (cached.validation == current) return cached
+        if (!LyricsSimilarity.accepts(reference, cached.document, similarity)) return null
+        return cached.copy(validation = current)
+    }
 
     private fun search(provider: LyricsProvider, query: TrackQuery, keywords: String): List<LyricsCandidate> =
         searchCache.getOrLoad(provider, query, keywords, AUTOMATIC_RESULTS_PER_SOURCE)

@@ -1,6 +1,8 @@
 package io.github.solitaire.spwlyrics.domain
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import java.security.MessageDigest
 
 @Serializable
 enum class LyricsFormat {
@@ -47,6 +49,12 @@ data class LyricsDocument(
     val metadata: Map<String, List<String>> = emptyMap(),
     val rawTtml: String? = null,
 ) {
+    /** Computed once for this immutable local document, outside the per-frame rendering path. */
+    internal val referenceFingerprint: String by lazy {
+        MessageDigest.getInstance("SHA-256").digest(Json.encodeToString(this).toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
+
     val isInstrumental: Boolean
         get() = InstrumentalLyricsClassifier.matches(lines)
 

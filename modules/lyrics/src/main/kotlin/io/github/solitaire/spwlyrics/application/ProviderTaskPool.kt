@@ -1,7 +1,13 @@
 package io.github.solitaire.spwlyrics.application
 
 import java.util.concurrent.ExecutorCompletionService
-import java.util.concurrent.Executors
+import java.util.concurrent.Callable
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.FutureTask
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.RunnableFuture
+import java.util.concurrent.ThreadPoolExecutor
+import io.github.solitaire.spwlyrics.provider.ProviderCancellation
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -9,8 +15,24 @@ import java.util.concurrent.atomic.AtomicInteger
 internal class ProviderTaskPool(
     parallelism: Int = DEFAULT_PARALLELISM,
 ) : AutoCloseable {
-    private val executor = Executors.newFixedThreadPool(parallelism) { task ->
-        Thread(task, "spw-provider-${THREAD_NUMBER.incrementAndGet()}").apply { isDaemon = true }
+    private val active = ConcurrentHashMap.newKeySet<FutureTask<*>>()
+    private val executor = object : ThreadPoolExecutor(parallelism, parallelism, 0, TimeUnit.MILLISECONDS,
+        LinkedBlockingQueue(), { task ->
+            Thread(task, "spw-provider-${THREAD_NUMBER.incrementAndGet()}").apply { isDaemon = true }
+        }) {
+        override fun <T> newTaskFor(callable: Callable<T>): RunnableFuture<T> {
+            val cancellation = ProviderCancellation()
+            val task = object : FutureTask<T>(Callable { cancellation.run { callable.call() } }) {
+                override fun cancel(mayInterruptIfRunning: Boolean): Boolean {
+                    val changed = super.cancel(mayInterruptIfRunning)
+                    if (changed) cancellation.cancel()
+                    return changed
+                }
+                override fun done() { active.remove(this) }
+            }
+            active.add(task)
+            return task
+        }
     }
 
     fun <T> collect(
@@ -109,6 +131,7 @@ internal class ProviderTaskPool(
     }
 
     override fun close() {
+        active.toList().forEach { it.cancel(true) }
         executor.shutdownNow()
     }
 

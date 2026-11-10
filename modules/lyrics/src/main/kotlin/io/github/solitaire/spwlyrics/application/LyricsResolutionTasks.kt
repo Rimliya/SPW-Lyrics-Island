@@ -13,21 +13,25 @@ internal class LyricsResolutionTasks(
         Thread(task, "spw-lyrics-precache-search").apply { isDaemon = true }
     },
 ) : AutoCloseable {
-    private data class Work(val task: FutureTask<Unit>)
+    private data class Work(val task: FutureTask<Unit>, val context: Any?)
     private val work = ConcurrentHashMap<String, Work>()
     @Volatile private var closed = false
 
     fun contains(key: String): Boolean = work.containsKey(key)
 
-    fun start(key: String, background: Boolean = false, action: (isActive: () -> Boolean) -> Unit): Future<*> {
+    fun start(key: String, background: Boolean = false, context: Any? = null, action: (isActive: () -> Boolean) -> Unit): Future<*> {
         lateinit var entry: Work
         val task = object : FutureTask<Unit>({
             action { !closed && work[key] === entry && !entry.task.isCancelled }
         }, Unit) {
             override fun done() { work.remove(key, entry) }
         }
-        entry = Work(task)
-        work.putIfAbsent(key, entry)?.let { return it.task }
+        entry = Work(task, context)
+        while (true) {
+            val existing = work.putIfAbsent(key, entry) ?: break
+            if (existing.context == context) return existing.task
+            if (work.remove(key, existing)) existing.task.cancel(true)
+        }
         if (closed) task.cancel(true)
         else try {
             (if (background) this.background else foreground).execute(task)

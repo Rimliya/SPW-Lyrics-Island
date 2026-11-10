@@ -12,6 +12,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
+import java.io.IOException
 
 class ProviderSearchCacheTest {
     private val query = TrackQuery("Track", listOf("Artist"), "Album", durationMs = 180_000)
@@ -66,6 +68,95 @@ class ProviderSearchCacheTest {
         } finally {
             executor.shutdownNow()
         }
+    }
+
+    @Test fun retriesFailuresWithoutCachingAnEmptyResult() {
+        val cache = ProviderSearchCache()
+        var attempts = 0
+        val provider = FakeProvider { _, _, _ ->
+            if (++attempts == 1) throw IOException("temporary failure")
+            listOf(candidate)
+        }
+        assertFailsWith<IOException> { cache.getOrLoad(provider, query, "track", 20) }
+        assertEquals(listOf(candidate), cache.getOrLoad(provider, query, "track", 20))
+        assertEquals(listOf(candidate), cache.getOrLoad(provider, query, "track", 20))
+        assertEquals(2, attempts)
+        assertEquals(1, cache.snapshot().providerFailures)
+    }
+
+    @Test fun cancelledLoadIsNotNegativeCachedOrCountedAsFailure() {
+        val cache = ProviderSearchCache()
+        var cancelled = true
+        val provider = FakeProvider { _, _, _ ->
+            if (cancelled) throw InterruptedException("cancelled")
+            listOf(candidate)
+        }
+        try {
+            assertFailsWith<InterruptedException> { cache.getOrLoad(provider, query, "track", 20) }
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally { Thread.interrupted() }
+        cancelled = false
+        assertEquals(listOf(candidate), cache.getOrLoad(provider, query, "track", 20))
+        assertEquals(2, provider.calls.get())
+        assertEquals(0, cache.snapshot().providerFailures)
+    }
+
+    @Test fun interruptedWaiterLeavesSharedRequestUsable() {
+        val cache = ProviderSearchCache()
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val interrupted = java.util.concurrent.atomic.AtomicBoolean()
+        val provider = FakeProvider { _, _, _ ->
+            started.countDown()
+            check(release.await(5, TimeUnit.SECONDS))
+            listOf(candidate)
+        }
+        val executor = Executors.newSingleThreadExecutor()
+        val first = executor.submit<List<LyricsCandidate>> { cache.getOrLoad(provider, query, "track", 20) }
+        val waiter = Thread {
+            try { cache.getOrLoad(provider, query, "track", 20) }
+            catch (_: InterruptedException) { interrupted.set(Thread.currentThread().isInterrupted) }
+        }
+        try {
+            assertTrue(started.await(5, TimeUnit.SECONDS))
+            waiter.start()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+            while (cache.snapshot().joinedRequests == 0L && System.nanoTime() < deadline) Thread.sleep(5)
+            assertEquals(1, cache.snapshot().joinedRequests)
+            waiter.interrupt()
+            waiter.join(3_000)
+            assertTrue(interrupted.get())
+            release.countDown()
+            assertEquals(listOf(candidate), first.get(5, TimeUnit.SECONDS))
+            assertEquals(listOf(candidate), cache.getOrLoad(provider, query, "track", 20))
+            assertEquals(1, provider.calls.get())
+        } finally { release.countDown(); waiter.interrupt(); executor.shutdownNow() }
+    }
+
+    @Test fun activeWaiterRetriesWhenTheSharedOwnerIsCancelled() {
+        val cache = ProviderSearchCache()
+        val started = CountDownLatch(1)
+        val calls = AtomicInteger()
+        val provider = FakeProvider { _, _, _ ->
+            if (calls.incrementAndGet() == 1) {
+                started.countDown()
+                CountDownLatch(1).await(5, TimeUnit.SECONDS)
+            }
+            listOf(candidate)
+        }
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val owner = executor.submit<List<LyricsCandidate>> { cache.getOrLoad(provider, query, "track", 20) }
+            assertTrue(started.await(5, TimeUnit.SECONDS))
+            val waiter = executor.submit<List<LyricsCandidate>> { cache.getOrLoad(provider, query, "track", 20) }
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+            while (cache.snapshot().joinedRequests == 0L && System.nanoTime() < deadline) Thread.sleep(5)
+            assertEquals(1, cache.snapshot().joinedRequests)
+            owner.cancel(true)
+            assertEquals(listOf(candidate), waiter.get(5, TimeUnit.SECONDS))
+            assertEquals(2, calls.get())
+            assertEquals(0, cache.snapshot().providerFailures)
+        } finally { executor.shutdownNow() }
     }
 
     private class FakeProvider(

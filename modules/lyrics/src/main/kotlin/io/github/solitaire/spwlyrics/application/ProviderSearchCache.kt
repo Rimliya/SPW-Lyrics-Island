@@ -3,7 +3,10 @@ package io.github.solitaire.spwlyrics.application
 import io.github.solitaire.spwlyrics.domain.LyricsCandidate
 import io.github.solitaire.spwlyrics.domain.TrackQuery
 import io.github.solitaire.spwlyrics.provider.LyricsProvider
+import io.github.solitaire.spwlyrics.provider.ProviderCancellation
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CancellationException
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -35,32 +38,51 @@ internal class ProviderSearchCache(
     private val providerFailures = AtomicLong()
 
     fun getOrLoad(provider: LyricsProvider, query: TrackQuery, keywords: String, limit: Int): List<LyricsCandidate> {
+        ProviderCancellation.checkActive()
         val key = Key(provider.source.name, query.key, keywords.trim().lowercase(), limit)
-        cached(key)?.let {
-            hits.incrementAndGet()
-            if (it.isEmpty()) negativeHits.incrementAndGet()
-            return it
-        }
-        misses.incrementAndGet()
-        val promise = CompletableFuture<List<LyricsCandidate>>()
-        val existing = inFlight.putIfAbsent(key, promise)
-        if (existing != null) {
-            joinedRequests.incrementAndGet()
-            return runCatching { existing.get().toList() }.getOrDefault(emptyList())
-        }
-        return try {
-            val loaded = runCatching { provider.search(query, keywords, limit) }
-                .onFailure { providerFailures.incrementAndGet() }
-                .getOrDefault(emptyList())
-                .toList()
-            store(key, loaded)
-            promise.complete(loaded)
-            loaded
-        } catch (error: Throwable) {
-            promise.completeExceptionally(error)
-            throw error
-        } finally {
-            inFlight.remove(key, promise)
+        while (true) {
+            ProviderCancellation.checkActive()
+            cached(key)?.let {
+                hits.incrementAndGet()
+                if (it.isEmpty()) negativeHits.incrementAndGet()
+                return it
+            }
+            misses.incrementAndGet()
+            val promise = CompletableFuture<List<LyricsCandidate>>()
+            val existing = inFlight.putIfAbsent(key, promise)
+            if (existing != null) {
+                joinedRequests.incrementAndGet()
+                try {
+                    return existing.get().toList()
+                } catch (error: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw error
+                } catch (error: ExecutionException) {
+                    val cause = error.cause ?: error
+                    if (cause is InterruptedException || cause is CancellationException) {
+                        ProviderCancellation.checkActive()
+                        inFlight.remove(key, existing)
+                        continue
+                    }
+                    throw cause
+                }
+            }
+            return try {
+                val loaded = provider.search(query, keywords, limit).toList()
+                ProviderCancellation.checkActive()
+                store(key, loaded)
+                promise.complete(loaded)
+                loaded
+            } catch (error: Throwable) {
+                if (error is InterruptedException) Thread.currentThread().interrupt()
+                if (error !is InterruptedException && error !is CancellationException && !Thread.currentThread().isInterrupted)
+                    providerFailures.incrementAndGet()
+                inFlight.remove(key, promise)
+                promise.completeExceptionally(error)
+                throw error
+            } finally {
+                inFlight.remove(key, promise)
+            }
         }
     }
 

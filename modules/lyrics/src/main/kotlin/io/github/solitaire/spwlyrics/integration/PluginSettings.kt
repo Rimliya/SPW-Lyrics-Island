@@ -27,7 +27,8 @@ class PluginSettings(
         if (!it.reload()) return@Consumer
         val nextPolicy = readPolicy(it)
         val policyChanged = replacementPolicy.getAndSet(nextPolicy) != nextPolicy
-        similarityLevel.set(readSimilarity(it))
+        val nextSimilarity = readSimilarity(it)
+        val similarityChanged = similarityLevel.getAndSet(nextSimilarity) != nextSimilarity
         prefetchNext.set(readPrefetch(it))
         val next = readSelection(it)
         val changed = next.getOrNull()?.let { value -> selection.getAndSet(value) != value } ?: false
@@ -35,7 +36,7 @@ class PluginSettings(
         if (invalid != null && invalid != invalidInput) notify("排序未生效，已保留上一次有效设置。$invalid")
         invalidInput = invalid
         val key = it.get("lrcshare_api_key", "").trim()
-        if (shareKey.getAndSet(key) != key || changed || policyChanged) onSelectionChanged()
+        if (shareKey.getAndSet(key) != key || changed || policyChanged || similarityChanged) onSelectionChanged()
     }
 
     init {

@@ -25,6 +25,7 @@ class ProviderHttpClient(
     override fun get(url: String, headers: Map<String, String>): String = try {
         send(url, "GET", null, null, headers)
     } catch (failure: Throwable) {
+        ProviderCancellation.checkActive()
         if (!url.startsWith("https://") || !failure.hasTlsFailure()) throw failure
         runCatching { directHttpsFallback.get(url, headers) }.getOrElse { fallbackFailure ->
             failure.addSuppressed(fallbackFailure)
@@ -37,6 +38,7 @@ class ProviderHttpClient(
         return try {
             send(url, "POST", "application/json; charset=utf-8", bytes, headers)
         } catch (failure: Throwable) {
+            ProviderCancellation.checkActive()
             if (!url.startsWith("https://") || !failure.hasTlsFailure() || Thread.currentThread().isInterrupted) throw failure
             runCatching { directHttpsFallback.postJson(url, bytes, headers) }.getOrElse { fallbackFailure ->
                 failure.addSuppressed(fallbackFailure)
@@ -63,8 +65,9 @@ class ProviderHttpClient(
         body: ByteArray?,
         headers: Map<String, String>,
     ): String {
-        if (Thread.currentThread().isInterrupted) throw InterruptedException("Provider request cancelled")
+        ProviderCancellation.checkActive()
         val connection = URI.create(url).toURL().openConnection() as HttpURLConnection
+        val cancellation = ProviderCancellation.registerConnection(connection::disconnect)
         try {
             connection.requestMethod = method
             connection.connectTimeout = connectTimeoutMs
@@ -91,6 +94,7 @@ class ProviderHttpClient(
             }
             return stream.bufferedReader(responseCharset(connection.contentType)).use { it.readText() }
         } finally {
+            cancellation.close()
             connection.errorStream?.close()
             connection.disconnect()
         }

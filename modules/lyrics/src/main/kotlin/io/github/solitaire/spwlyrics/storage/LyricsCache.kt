@@ -7,6 +7,7 @@ import io.github.solitaire.spwlyrics.domain.LyricsFormat
 import io.github.solitaire.spwlyrics.domain.LyricsSource
 import io.github.solitaire.spwlyrics.domain.TrackQuery
 import java.nio.charset.StandardCharsets
+import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -28,6 +29,7 @@ data class CachedLyrics(
     val encoderVersion: Int = SpwLyricsEncoder.VERSION,
     val selectionKey: String = "",
     val candidate: LyricsCandidate? = null,
+    val validation: LyricsCacheValidation? = null,
 )
 
 @Serializable
@@ -60,6 +62,8 @@ interface LyricsCache {
     fun hasLyrics(query: TrackQuery): Boolean = getLyrics(query) != null
     fun putLyrics(query: TrackQuery, lyrics: CachedLyrics)
     fun removeLyrics(query: TrackQuery)
+    /** Implementations may persist a successful recheck only if the original entry is still current. */
+    fun updateValidation(query: TrackQuery, expected: CachedLyrics, validation: LyricsCacheValidation): Boolean = false
     fun getOverride(query: TrackQuery): ManualOverride?
     fun putOverride(query: TrackQuery, override: ManualOverride)
     fun removeOverride(query: TrackQuery)
@@ -135,6 +139,18 @@ class FileLyricsCache(
             Files.deleteIfExists(layout.lyrics(query))
         }
     }
+
+    override fun updateValidation(query: TrackQuery, expected: CachedLyrics, validation: LyricsCacheValidation): Boolean =
+        synchronized(trackLock(query.key)) {
+            val current = getLyrics(query) ?: return@synchronized false
+            if (current != expected || getSelection(query)?.let { it.local || it.candidate != null } == true)
+                return@synchronized false
+            val updated = current.copy(validation = validation)
+            synchronized(memory) { memory[query.key] = updated }
+            // A read-only cache can still serve a verified entry for this session.
+            try { write(layout.lyrics(query), json.encodeToString(updated)) } catch (_: IOException) { }
+            true
+        }
 
     override fun getOverride(query: TrackQuery): ManualOverride? {
         val path = layout.override(query)

@@ -32,6 +32,7 @@ class LyricsLoadCoordinator(
     private val delays: LyricsDelaySettings? = null,
     private val output: LyricsOutputRouter? = null,
     private val prepareQuery: (TrackQuery) -> TrackQuery = { it },
+    private val referenceLyrics: ((TrackQuery) -> LyricsDocument?)? = null,
     private val similarityLevel: () -> LyricsSimilarity.Level = { LyricsSimilarity.Level.STANDARD },
 ) : AutoCloseable {
     private val refreshRetrier = LyricsRefreshRetrier(refreshBridge, notify)
@@ -109,7 +110,7 @@ class LyricsLoadCoordinator(
             if (override?.local == true) return@synchronized followHost(query)
             val automaticLoadAllowed = replacementPolicy.allowsAutomaticLoad(phase)
             if (override?.candidate == null && !automaticLoadAllowed) return@synchronized followHost(query)
-            cache.getLyrics(query)?.takeIf { override?.candidate != null || it.selectionKey == resolver.selectionKey() }?.let { cached ->
+            validatedCache(query, manual = override?.candidate != null)?.let { cached ->
                 notifiedFailures.remove(query.key)
                 if (override?.candidate == null && !tasks.contains(query.key)) {
                     startQualityUpgradeIfNeeded(query, resolvedFromCache(query, cached))
@@ -129,8 +130,8 @@ class LyricsLoadCoordinator(
         if (override?.local == true) return null
         if (override?.candidate == null && hasLocalLyrics) return null
         if (override == null && InstrumentalLyrics.isInstrumentalTitle(query.title)) return null
-        if (cache.getLyrics(query)?.let { override?.candidate != null || it.selectionKey == resolver.selectionKey() } == true) return null
-        return startLoad(query, override?.candidate, background = true, reference = reference ?: localReference(query))
+        if (validatedCache(query, manual = override?.candidate != null, reference = reference ?: referenceFor(query)) != null) return null
+        return startLoad(query, override?.candidate, background = true, reference = reference ?: referenceFor(query))
     }
 
     fun searchManual(query: TrackQuery, keywords: String, source: io.github.solitaire.spwlyrics.domain.LyricsSource?,
@@ -142,9 +143,11 @@ class LyricsLoadCoordinator(
     /** Resolves the automatic choice without applying it or replacing a manual selection. */
     fun previewAutomatic(query: TrackQuery): ResolvedLyrics? {
         val selectionKey = resolver.selectionKey()
-        val cached = cache.getLyrics(query)?.takeIf { it.selectionKey == selectionKey }
+        val reference = referenceFor(query)
+        val level = similarityLevel()
+        val cached = validatedCache(query, reference = reference)
         val resolved = cached?.candidate?.let { ResolvedLyrics(it, cached.document, cached.selectionKey) }
-            ?: resolver.resolveAutomaticFully(prepareQuery(query))
+            ?: resolver.resolveAutomaticFully(prepareQuery(query), reference = reference, similarity = level)
         return resolved?.takeIf { it.selectionKey == resolver.selectionKey() }?.also(resolver::rememberManual)
     }
 
@@ -254,9 +257,11 @@ class LyricsLoadCoordinator(
         query: TrackQuery,
         manual: LyricsCandidate?,
         background: Boolean = false,
-        reference: LyricsDocument? = localReference(query),
-    ): Future<*> =
-        tasks.start(query.key, background) { isActive ->
+        reference: LyricsDocument? = referenceFor(query),
+    ): Future<*> {
+        val level = similarityLevel()
+        val context = io.github.solitaire.spwlyrics.storage.LyricsCacheValidation.current(reference, level)
+        return tasks.start(query.key, background, context = context) { isActive ->
             try {
                 if (manual == null) {
                     val prepared = prepareQuery(query)
@@ -266,7 +271,7 @@ class LyricsLoadCoordinator(
                         query = prepared,
                         snapshotDeadlineNanos = deadline,
                         reference = reference,
-                        similarity = similarityLevel(),
+                        similarity = level,
                         background = background,
                     ) { interim ->
                         applyAutomaticResult(query, interim, isActive)
@@ -295,13 +300,16 @@ class LyricsLoadCoordinator(
                 if (isActive() && manual == null) recordAutomaticFailure(query)
             }
         }
+    }
 
     private fun applyAutomaticResult(query: TrackQuery, result: ResolvedLyrics, isActive: () -> Boolean) = synchronized(selectionLock) {
         if (closed || !isActive()) return@synchronized
         if (query.isExternalPlayback && !isCurrent(query)) return@synchronized
         if (automaticWasSuperseded(query)) return@synchronized
         if (result.selectionKey != resolver.selectionKey()) return@synchronized
-        val cached = cache.getLyrics(query)?.takeIf { it.selectionKey == result.selectionKey }
+        val reference = referenceFor(query)
+        if (result.validation != io.github.solitaire.spwlyrics.storage.LyricsCacheValidation.current(reference, similarityLevel())) return@synchronized
+        val cached = validatedCache(query, reference = reference)
         if (cached != null && !resolver.canReplace(cached.document, result.document)) return@synchronized
         if (cached?.document == result.document) return@synchronized
         cache.putLyrics(query, resolver.toCache(result))
@@ -319,11 +327,11 @@ class LyricsLoadCoordinator(
             if (automaticWasSuperseded(query)) return@start
             val upgraded = resolver.resolveAutomaticFully(
                 prepareQuery(query),
-                reference = localReference(query),
+                reference = referenceFor(query),
                 similarity = similarityLevel(),
             )
             if (!isActive() || automaticWasSuperseded(query)) return@start
-            val cached = cache.getLyrics(query) ?: return@start
+            val cached = validatedCache(query) ?: return@start
             if (cached.document != resolved.document) return@start
             if (upgraded != null && resolver.canReplace(cached.document, upgraded.document)) {
                 applyAutomaticResult(query, upgraded, isActive)
@@ -332,6 +340,18 @@ class LyricsLoadCoordinator(
     }
 
     private fun upgradeKey(query: TrackQuery): String = "${query.key}/upgrade"
+
+    private fun referenceFor(query: TrackQuery): LyricsDocument? =
+        if (referenceLyrics != null) referenceLyrics.invoke(query) else localReference(query)
+
+    private fun validatedCache(query: TrackQuery, manual: Boolean = false,
+                               reference: LyricsDocument? = null): CachedLyrics? {
+        val cached = cache.getLyrics(query) ?: return null
+        if (manual) return cached
+        val validated = resolver.revalidateCached(cached, reference ?: referenceFor(query), similarityLevel()) ?: return null
+        if (validated !== cached && !cache.updateValidation(query, cached, checkNotNull(validated.validation))) return null
+        return validated
+    }
 
     private fun localReference(query: TrackQuery): LyricsDocument? =
         localLyrics.get()?.takeIf { it.first == query.key }?.second

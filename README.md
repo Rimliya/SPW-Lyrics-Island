@@ -3,7 +3,7 @@
 将 **灵动词岛**、**SPW Lyrics** 与 **SPW Tag Workbench** 合并为一个 `.spmod`：顶部歌词入口统一打开标签工作台与歌词工具，词岛负责显示，SPW Lyrics 负责多来源歌词搜索与批量处理，Tag Workbench 负责标签、封面、艺术家图与 ReplayGain，打轴频谱复用宿主已初始化的 BASS。
 
 > 插件作者：`solitaire + 大肥鱼`。本项目是基于多个上游模块的合并发行版，Windows x64 专用，保留 OBS Spout2 透明输出。感谢原作者 GaBoron，以及 Tag Workbench 的 univers629 / salt-workshop contributors。
-> 当前审阅分支以 `1.10.0-BASS-GPU` 为基线，保留定制功能并选择性移植外部音源接口、虚拟曲目恢复、中文翻译筛选和搜索异常兼容修复。范围与验证见 [本轮审阅记录](docs/upstream-review-20261110.md)。
+> `1.10.0-BASS-GPU` 保留定制功能并选择性移植外部音源接口、虚拟曲目恢复、中文翻译筛选和搜索异常兼容修复。当前 `1.10.1-test.1-BASS-GPU` 是独立优化测试版，包含请求取消、自动缓存校验与画布回收，见 [优化范围与测试](docs/optimization-124.md)；1.10.0 的来源见 [审阅记录](docs/upstream-review-20261110.md)。
 
 <p align="center">
   <a href="https://github.com/Rimliya/SPW-Lyrics-Island/releases/latest"><img src="https://img.shields.io/github/v/release/Rimliya/SPW-Lyrics-Island?label=Release" alt="Release"></a>

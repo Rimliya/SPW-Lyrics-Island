@@ -103,7 +103,7 @@ internal fun batchSkipReason(
         remainingWorkers = AtomicInteger(PARALLEL_TRACKS)
         val sharedResolutions = ConcurrentHashMap<String, CompletableFuture<ResolvedLyrics?>>()
         val expectedGeneration = generation
-        repeat(PARALLEL_TRACKS) { workers.execute { process(expectedGeneration, sharedResolutions) } }
+        repeat(PARALLEL_TRACKS) { workers.execute { process(expectedGeneration, sharedResolutions, includeCached) } }
         snapshotLocked()
     }
 
@@ -144,14 +144,13 @@ internal fun batchSkipReason(
                     stage = "未选择",
                     message = "未选择",
                 )
-                cache.getOverride(query) != null -> LyricsBatchItem(query, LyricsBatchItemState.EXCLUDED,
+                cache.getSelection(query)?.let { it.local || it.candidate != null } == true -> LyricsBatchItem(query, LyricsBatchItemState.EXCLUDED,
                     selected = false, stage = "保留单曲选择", message = "保留手动选择或本地歌词")
-                !includeCached && cache.getLyrics(query)?.let { it.selectionKey == resolver.selectionKey() } == true -> LyricsBatchItem(
+                !includeCached && cache.hasLyrics(query) -> LyricsBatchItem(
                     query,
-                    LyricsBatchItemState.CACHED,
-                    progress = 1.0,
-                    stage = "已有缓存",
-                    message = "已有缓存",
+                    LyricsBatchItemState.WAITING,
+                    stage = "等待校验缓存",
+                    message = "开始后校验本地歌词与当前设置",
                 )
                 else -> LyricsBatchItem(query, LyricsBatchItemState.WAITING)
             }
@@ -162,6 +161,7 @@ internal fun batchSkipReason(
     private fun process(
         expectedGeneration: Int,
         sharedResolutions: ConcurrentHashMap<String, CompletableFuture<ResolvedLyrics?>>,
+        includeCached: Boolean,
     ) {
         while (true) {
             val index = takeNext(expectedGeneration) ?: break
@@ -180,10 +180,26 @@ internal fun batchSkipReason(
                 }
                 continue
             }
-            val outcome = runCatching {
-                resolveShared(query, local, similarityLevel(), expectedGeneration, index, sharedResolutions)
+            val level = similarityLevel()
+            if (!includeCached) {
+                val cached = cache.getLyrics(query)
+                val validated = cached?.let { resolver.revalidateCached(it, local, level) }
+                if (validated != null) {
+                    val reused = synchronized(lock) {
+                        if (generation != expectedGeneration) return
+                        if (validated !== cached && !cache.updateValidation(query, cached, checkNotNull(validated.validation)))
+                            return@synchronized false
+                        items[index] = items[index].copy(state = LyricsBatchItemState.CACHED,
+                            progress = 1.0, stage = "已有缓存", message = "缓存校验通过")
+                        true
+                    }
+                    if (reused) continue
+                }
             }
-            val resolved = outcome.getOrNull()?.takeIf { it.selectionKey == resolver.selectionKey() && cache.getOverride(query) == null }
+            val outcome = runCatching {
+                resolveShared(query, local, level, expectedGeneration, index, sharedResolutions)
+            }
+            val resolved = outcome.getOrNull()?.takeIf { it.selectionKey == resolver.selectionKey() && cache.getSelection(query)?.let { it.local || it.candidate != null } != true }
             if (resolved != null && isCurrent(expectedGeneration)) {
                 updateProgress(expectedGeneration, index, 0.97, "正在写入缓存", "正在写入缓存")
             }

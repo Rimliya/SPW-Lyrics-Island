@@ -68,6 +68,7 @@ internal class DirectHttpsFallback(
         headers: Map<String, String>,
     ): Response {
         val plain = Socket()
+        val cancellation = ProviderCancellation.registerConnection(plain::close)
         try {
             plain.connect(InetSocketAddress(address, port), connectTimeoutMs)
             val tls = (SSLSocketFactory.getDefault() as SSLSocketFactory)
@@ -85,6 +86,8 @@ internal class DirectHttpsFallback(
         } catch (failure: Throwable) {
             runCatching { plain.close() }
             throw failure
+        } finally {
+            cancellation.close()
         }
     }
 
@@ -152,6 +155,7 @@ internal class PublicDnsResolver(
         val encoded = ProviderHttpClient.encode(host)
         val connection = URI.create("https://1.1.1.1/dns-query?name=$encoded&type=A")
             .toURL().openConnection() as HttpsURLConnection
+        val cancellation = ProviderCancellation.registerConnection(connection::disconnect)
         connection.connectTimeout = DNS_TIMEOUT_MS
         connection.readTimeout = DNS_TIMEOUT_MS
         connection.setRequestProperty("Accept", "application/dns-json")
@@ -159,6 +163,7 @@ internal class PublicDnsResolver(
         val payload = try {
             connection.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
         } finally {
+            cancellation.close()
             connection.disconnect()
         }
         val addresses = parsePublicIpv4Addresses(payload)

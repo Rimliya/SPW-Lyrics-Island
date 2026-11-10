@@ -111,8 +111,7 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
     private var hoverActive = false
     private var frameFailed = false
 
-    private var canvasWidth = 0
-    private var canvasHeight = 0
+    private val canvasCapacity = IslandCanvasCapacity()
     private var buffersReleased = false
     private var dragTopLeft: Point? = null
     private var dragAnchor: IslandAnchor? = null
@@ -266,7 +265,7 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
             if (!settings.enabled && !buffersReleased) {
                 panel.releaseBuffers(); window.releaseFrame()
                 renderer.release(); window.gpuRendering = false
-                canvasWidth = 0; canvasHeight = 0
+                canvasCapacity.reset()
                 buffersReleased = true
             }
             surface.hoverPose = IslandHoverMotion.Pose.HIDDEN
@@ -361,11 +360,20 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
         val targetCanvasHeight = maxOf(currentHeight, desired.height, panel.reservedContentHeight,
             settings.fontSize * 4 + IslandTextBlock.EXPANDED_HEIGHT + 60)
         val canvasPadding = IslandHoverGeometry.padding(maxOf(settings.maxWidth, currentWidth), targetCanvasHeight, settings.notch)
-        canvasWidth = maxOf(canvasWidth, settings.maxWidth + canvasPadding.left + canvasPadding.right, presentationBounds.width)
-        canvasHeight = maxOf(canvasHeight, targetCanvasHeight + canvasPadding.top + canvasPadding.bottom, presentationBounds.height)
-        surface.renderCapacity.setSize(canvasWidth, canvasHeight)
+        val previousCanvasWidth = canvasCapacity.width
+        val previousCanvasHeight = canvasCapacity.height
+        canvasCapacity.update(
+            maxOf(settings.maxWidth + canvasPadding.left + canvasPadding.right, presentationBounds.width),
+            maxOf(targetCanvasHeight + canvasPadding.top + canvasPadding.bottom, presentationBounds.height), now,
+            settled = !dragging && !panel.progress.dragging && !expandedMotion.animating && panel.transition >= 1.0 &&
+                abs(width - desired.width) < 1.0 && abs(height - desired.height) < 1.0)
+        if (canvasCapacity.width < previousCanvasWidth || canvasCapacity.height < previousCanvasHeight) {
+            panel.releaseBuffers()
+            window.releaseFrame()
+        }
+        surface.renderCapacity.setSize(canvasCapacity.width, canvasCapacity.height)
         val preferredCanvas = IslandPlacement.bounds(screen, IslandPlacement.anchorPoint(presentationBounds, placementAnchor),
-            canvasWidth, canvasHeight, placementAnchor)
+            canvasCapacity.width, canvasCapacity.height, placementAnchor)
         val bounds = if (stableTranslucentCanvas) {
             IslandPlacement.stableCanvasBounds(screen, presentationBounds, preferredCanvas, window.bounds)
         } else presentationBounds
@@ -503,8 +511,7 @@ class IslandWindow(private val timeline: PlaybackSource, private val store: Sett
         window.releaseFrame()
         renderer.release()
         window.gpuRendering = false
-        canvasWidth = 0
-        canvasHeight = 0
+        canvasCapacity.reset()
         buffersReleased = true
         surface.hoverPose = IslandHoverMotion.Pose.HIDDEN
         surface.clearGpuFrame()

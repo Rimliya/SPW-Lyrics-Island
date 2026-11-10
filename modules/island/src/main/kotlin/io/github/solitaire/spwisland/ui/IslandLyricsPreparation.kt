@@ -26,6 +26,8 @@ internal class IslandLyricsPreparation(private val layouts: IslandLyricsLayout.C
     private var position = 0L
     @Volatile private var generation = 0L
     @Volatile private var closed = false
+    private val heightLock = Any()
+    private var heightSettings: HeightSettings? = null
     @Volatile var preparedHeight = 0
         private set
     private var analyzedLyrics: List<LyricLine>? = null
@@ -38,9 +40,17 @@ internal class IslandLyricsPreparation(private val layouts: IslandLyricsLayout.C
         position = snapshot.positionMs
         if (!jumped && track == snapshot.track && line == snapshot.line && lyrics == snapshot.lyrics &&
             settings == nextSettings && coverRgb == snapshot.metadata.coverRgb) return
+        val nextHeightSettings = HeightSettings(nextSettings.fontFamily, nextSettings.fontWeight,
+            nextSettings.fontSize, nextSettings.translation, nextSettings.experimentalMultiLine,
+            nextSettings.karaoke, nextSettings.forceKaraoke)
+        val resetHeight = track != snapshot.track || lyrics !== snapshot.lyrics || heightSettings != nextHeightSettings
         track = snapshot.track; line = snapshot.line; lyrics = snapshot.lyrics
         settings = nextSettings; coverRgb = snapshot.metadata.coverRgb
-        val request = ++generation
+        heightSettings = nextHeightSettings
+        val request = synchronized(heightLock) {
+            if (resetHeight) preparedHeight = 0
+            ++generation
+        }
         try {
             worker.execute {
                 if (closed || request != generation) return@execute
@@ -76,7 +86,10 @@ internal class IslandLyricsPreparation(private val layouts: IslandLyricsLayout.C
         for (sample in listOf(snapshot) + upcoming.map { snapshot.copy(line = it, positionMs = it.startMs) }) {
             if (closed || request != generation) return
             val layout = layouts.forSnapshot(sample, settings)
-            preparedHeight = maxOf(preparedHeight, layout.preferredHeight)
+            synchronized(heightLock) {
+                if (closed || request != generation) return
+                preparedHeight = maxOf(preparedHeight, layout.preferredHeight)
+            }
             for (block in layout.blocks) {
                 if (closed || request != generation) return
                 // The native GPU painter uses outlines for every line, including low-performance text.
@@ -101,8 +114,12 @@ internal class IslandLyricsPreparation(private val layouts: IslandLyricsLayout.C
     }
 
     override fun close() {
-        closed = true; generation++; worker.shutdownNow()
+        synchronized(heightLock) { closed = true; generation++; preparedHeight = 0 }
+        worker.shutdownNow()
     }
+
+    private data class HeightSettings(val family: String, val weight: LyricFontWeight, val size: Int,
+        val translation: Boolean, val multiLine: Boolean, val karaoke: Boolean, val forceKaraoke: Boolean)
 
     companion object {
         fun trackLabel(track: Track?): String = listOfNotNull(track?.title, track?.artist)

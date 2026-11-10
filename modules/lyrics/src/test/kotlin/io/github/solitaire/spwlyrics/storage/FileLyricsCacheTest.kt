@@ -44,6 +44,8 @@ class FileLyricsCacheTest {
                 cache.putLyrics(query, CachedLyrics(document(), savedAtEpochMs = System.currentTimeMillis()))
             }
             cache.putOverride(older, ManualOverride(local = true))
+            val note = root.resolve("歌词").resolve("keep.txt")
+            Files.writeString(note, "not a cache entry")
 
             val result = cache.prune(maxBytes = 1L, protect = newer)
             assertEquals(1, result.deletedFiles)
@@ -51,12 +53,14 @@ class FileLyricsCacheTest {
             assertTrue(cache.hasLyrics(older))
             assertFalse(cache.hasLyrics(extra))
             assertNotNull(cache.getOverride(older))
-            assertEquals(2, Files.list(root.resolve("歌词")).use { it.count() })
+            assertEquals(2, Files.list(root.resolve("歌词")).use { paths -> paths.filter { it.fileName.toString().endsWith(".json") }.count() },
+                Files.list(root.resolve("歌词")).use { paths -> paths.map { it.fileName.toString() }.toList().toString() })
 
             val cleared = cache.clearCachedLyrics()
             assertEquals(2, cleared.deletedFiles)
             assertFalse(cache.hasLyrics(newer))
             assertNotNull(cache.getOverride(older))
+            assertTrue(Files.exists(note))
         } finally {
             root.toFile().deleteRecursively()
         }

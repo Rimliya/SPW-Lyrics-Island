@@ -146,6 +146,13 @@ object PluginRuntime {
             delays = delays,
             output = output,
             prepareQuery = libraryTracks::prepare,
+            referenceLyrics = { query ->
+                if (query.isExternalPlayback) externalPlayback.snapshot()?.takeIf {
+                    it.sourceName.canonicalName == query.playbackObjectName && it.sessionId == query.playbackSessionId &&
+                        it.trackRevision == query.playbackTrackRevision && it.uri == query.playbackUri
+                }?.let(externalPlayback::sourceLyrics)?.document()
+                else localTtmlLyrics.loadReference(query.path)
+            },
             similarityLevel = { settings?.similarityLevel() ?: LyricsSimilarity.Level.STANDARD },
         )
         coordinator = installedCoordinator
@@ -153,7 +160,7 @@ object PluginRuntime {
             loadLibrary = libraryTracks::loadForPrecache,
             prepare = { query ->
                 val local = localTtmlLyrics.load(query.path)
-                coordinator?.precache(query, hasLocalLyrics = local != null, reference = local)
+                coordinator?.precache(query, hasLocalLyrics = local != null, reference = localTtmlLyrics.loadReference(query.path))
             },
             enabled = { settings?.prefetchNextTrack() == true },
         )
@@ -466,7 +473,7 @@ object PluginRuntime {
     } == true
 
     private fun localLyrics(query: TrackQuery): LyricsDocument? =
-        query.path.takeIf(String::isNotBlank)?.let(localTtmlLyrics::load)
+        query.path.takeIf(String::isNotBlank)?.let(localTtmlLyrics::loadReference)
 
     private fun toastWarning(message: String) {
         runCatching { WorkshopApi.ui.toast(message, WorkshopApi.Ui.ToastType.Warning) }

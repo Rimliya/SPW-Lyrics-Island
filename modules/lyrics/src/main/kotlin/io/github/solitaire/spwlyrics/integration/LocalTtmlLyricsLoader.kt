@@ -18,22 +18,28 @@ internal class LocalTtmlLyricsLoader(
     private val readEmbedded: (Path) -> String? = ::readEmbeddedLyrics,
 ) {
     private data class Stamp(val size: Long, val modified: FileTime)
-    private data class Snapshot(val stamps: List<Stamp?>, val document: LyricsDocument?)
+    private class Snapshot(val stamps: List<Stamp?>, val document: LyricsDocument?, val raw: String?) {
+        val reference: LyricsDocument? by lazy {
+            document ?: runCatching { MetadataLyricsImport.preview(raw.orEmpty()) }.getOrNull()
+        }
+    }
     private data class Key(val audio: Path, val embeddedOnly: Boolean)
     private val snapshots = object : LinkedHashMap<Key, Snapshot>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, Snapshot>?): Boolean = size > 64
     }
 
-    fun load(audioPath: String): LyricsDocument? = load(audioPath, embeddedOnly = false)
+    fun load(audioPath: String): LyricsDocument? = snapshot(audioPath, embeddedOnly = false)?.document
 
-    fun loadEmbedded(audioPath: String): LyricsDocument? = load(audioPath, embeddedOnly = true)
+    fun loadReference(audioPath: String): LyricsDocument? = snapshot(audioPath, embeddedOnly = false)?.reference
+
+    fun loadEmbedded(audioPath: String): LyricsDocument? = snapshot(audioPath, embeddedOnly = true)?.document
 
     fun invalidate(audioPath: String) {
         val audio = localMediaPath(audioPath) ?: return
         synchronized(snapshots) { snapshots.keys.removeAll { it.audio == audio } }
     }
 
-    private fun load(audioPath: String, embeddedOnly: Boolean): LyricsDocument? = runCatching {
+    private fun snapshot(audioPath: String, embeddedOnly: Boolean): Snapshot? = runCatching {
         val audio = localMediaPath(audioPath) ?: return null
         val key = Key(audio, embeddedOnly)
         val stem = audio.fileName.toString().substringBeforeLast('.', audio.fileName.toString())
@@ -41,18 +47,18 @@ internal class LocalTtmlLyricsLoader(
         val ttml = audio.resolveSibling("$stem.ttml")
         val stamps = listOf(audio, lrc, ttml).map(::stamp)
         if (stamps.first() == null) return null
-        synchronized(snapshots) { snapshots[key]?.takeIf { it.stamps == stamps }?.let { return it.document } }
-        val document = when {
-            embeddedOnly -> MetadataLyricsImport.preview(readEmbedded(audio).orEmpty())
-                ?: LyricsDocument(LyricsSource.LOCAL, LyricsFormat.PLAIN, emptyList())
-            stamps[1] != null -> readSidecar(lrc)?.let(conversion::parse)
-            else -> {
-                val embedded = readEmbedded(audio)
-                if (embedded != null) conversion.parse(embedded) else readSidecar(ttml)?.let(conversion::parse)
-            }
+        synchronized(snapshots) { snapshots[key]?.takeIf { it.stamps == stamps }?.let { return it } }
+        val raw = when {
+            embeddedOnly -> readEmbedded(audio)
+            stamps[1] != null -> readSidecar(lrc)
+            else -> readEmbedded(audio) ?: readSidecar(ttml)
         }
-        synchronized(snapshots) { snapshots[key] = Snapshot(stamps, document) }
-        document
+        val document = if (embeddedOnly) MetadataLyricsImport.preview(raw.orEmpty())
+            ?: LyricsDocument(LyricsSource.LOCAL, LyricsFormat.PLAIN, emptyList())
+        else raw?.let(conversion::parse)
+        val result = Snapshot(stamps, document, raw)
+        synchronized(snapshots) { snapshots[key] = result }
+        result
     }.getOrNull()
 
     private fun stamp(path: Path): Stamp? = runCatching {

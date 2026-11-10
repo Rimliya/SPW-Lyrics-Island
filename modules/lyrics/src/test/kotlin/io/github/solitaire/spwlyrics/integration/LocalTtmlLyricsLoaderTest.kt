@@ -49,4 +49,17 @@ class LocalTtmlLyricsLoaderTest {
         }
     }
 
+    @Test fun ordinaryEmbeddedLyricsAreCachedAsReferenceWithoutChangingHostLoading() {
+        val directory = Files.createTempDirectory("spw-reference")
+        try {
+            val audio = directory.resolve("song.wav")
+            Files.write(audio, ByteArray(0))
+            var reads = 0
+            val loader = LocalTtmlLyricsLoader(readEmbedded = { reads++; "[00:00.00]reference lyric" })
+            assertNull(loader.load(audio.toString()))
+            assertEquals("reference lyric", loader.loadReference(audio.toString())?.lines?.single()?.text)
+            assertEquals("reference lyric", loader.loadReference(audio.toString())?.lines?.single()?.text)
+            assertEquals(1, reads)
+        } finally { directory.toFile().deleteRecursively() }
+    }
 }
