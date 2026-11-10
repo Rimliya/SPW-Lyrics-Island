@@ -14,10 +14,17 @@ data class TrackQuery(
     val durationMs: Long? = null,
     val externalIds: Map<String, String> = emptyMap(),
     val trackId: String = "",
+    val playbackProvider: String = "",
+    val playbackUri: String = "",
+    val playbackSessionId: String = "",
+    val playbackTrackRevision: Long = 0,
+    val playbackObjectName: String = "",
 ) {
+    val isExternalPlayback: Boolean get() = playbackUri.isNotBlank()
+
     /** Immutable query identity: normalize and hash once per track instead of on every lookup. */
     val key: String by lazy {
-        val identity = listOf(
+        val identity = if (isExternalPlayback) "$playbackProvider|$playbackUri" else listOf(
             path.trim().lowercase(),
             TextNormalizer.normalize(title),
             artists.joinToString("/") { TextNormalizer.normalize(it) },

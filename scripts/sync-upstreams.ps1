@@ -1,7 +1,7 @@
 param(
     [string]$IslandRef = "feat/font-slimming",
     [string]$LyricsRef = "feat/combined-workbench-entry",
-    [string]$TagWorkbenchRef = "feat/embedded-workbench"
+    [string]$TagWorkbenchRef = "feat/upstream-v1.4.0-embedded"
 )
 
 $ErrorActionPreference = "Stop"

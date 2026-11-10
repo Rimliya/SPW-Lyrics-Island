@@ -5,6 +5,7 @@ import java.nio.file.Files
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -25,7 +26,6 @@ class LocalTtmlLyricsLoaderTest {
             directory.toFile().deleteRecursively()
         }
     }
-}
 
     @Test
     fun embeddedOnlyIgnoresSidecarAndInvalidatesCache() {
@@ -37,7 +37,8 @@ class LocalTtmlLyricsLoaderTest {
             var embedded = "[00:00.00]embedded one"
             val loader = LocalTtmlLyricsLoader(readEmbedded = { embedded })
 
-            assertEquals("sidecar", loader.load(audio.toString())?.lines?.single()?.text)
+            // Ordinary sidecar LRC stays on the host loading path.
+            assertNull(loader.load(audio.toString()))
             assertEquals("embedded one", loader.loadEmbedded(audio.toString())?.lines?.single()?.text)
 
             embedded = "[00:00.00]embedded two"
@@ -47,3 +48,5 @@ class LocalTtmlLyricsLoaderTest {
             directory.toFile().deleteRecursively()
         }
     }
+
+}

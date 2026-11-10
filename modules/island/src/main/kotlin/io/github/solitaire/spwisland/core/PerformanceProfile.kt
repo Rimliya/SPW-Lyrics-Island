@@ -16,6 +16,7 @@ enum class PerformanceProfile(
     val topmostRetryIntervalNs: Long,
     val visibilityCheckIntervalMs: Long,
     val metadataRecoveryIntervalMs: Long,
+    val externalPlaybackIntervalMs: Long,
     val diagnosticSampleIntervalNs: Long,
     val diagnosticStallTimeoutNs: Long
 ) {
@@ -26,6 +27,7 @@ enum class PerformanceProfile(
         topmostRetryIntervalNs = 1_000_000_000L,
         visibilityCheckIntervalMs = 1_000L,
         metadataRecoveryIntervalMs = 2_000L,
+        externalPlaybackIntervalMs = 500L,
         diagnosticSampleIntervalNs = 1_000_000_000L,
         diagnosticStallTimeoutNs = 5_000_000_000L),
     LOW(15, false, false, false, SpectrumMode.SYNTHETIC,
@@ -35,6 +37,7 @@ enum class PerformanceProfile(
         topmostRetryIntervalNs = 5_000_000_000L,
         visibilityCheckIntervalMs = 5_000L,
         metadataRecoveryIntervalMs = 10_000L,
+        externalPlaybackIntervalMs = 1_000L,
         diagnosticSampleIntervalNs = 5_000_000_000L,
         diagnosticStallTimeoutNs = 15_000_000_000L)
 }

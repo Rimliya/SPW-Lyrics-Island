@@ -2,6 +2,8 @@
 
 ## 同步三个上游
 
+当前 Combined 在 fork subtree 上另外维护了选择性移植补丁；不能将上游版本号视为完整合并记录。先核对 [1.10.0 审阅记录](upstream-review-20261110.md)，从当前定制分支建立备份和工作分支，再按补丁范围移植。下面的脚本用于同步 fork 快照，不代表已自动完成最新 GaBoron 上游的定制适配。
+
 ```powershell
 ./scripts/sync-upstreams.ps1
 ```
@@ -11,7 +13,7 @@
 ```powershell
 git subtree pull --prefix modules/island https://github.com/Rimliya/SPW-island.git feat/font-slimming --squash
 git subtree pull --prefix modules/lyrics https://github.com/Rimliya/SPW-Lyrics.git feat/combined-workbench-entry --squash
-git subtree pull --prefix modules/tag-workbench https://github.com/Rimliya/SPW-Tag-Workbench.git feat/embedded-workbench --squash
+git subtree pull --prefix modules/tag-workbench https://github.com/Rimliya/SPW-Tag-Workbench.git feat/upstream-v1.4.0-embedded --squash
 ```
 
 如果只想同步其中一个，可直接运行对应命令。冲突通常出现在上游重命名资源或增加依赖时：

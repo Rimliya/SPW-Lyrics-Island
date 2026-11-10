@@ -46,6 +46,7 @@ kotlin {
 }
 
 sourceSets {
+    test { java.srcDir("api") }
     main {
         java.srcDirs(
             "modules/combined/src/main/java",
@@ -302,6 +303,7 @@ tasks.register<Zip>("sourceArchive") {
     from("gradle") { into("gradle") }
     from("scripts") { into("scripts") }
     from("docs") { into("docs") }
+    from("api") { into("api") }
     from("licenses") { into("licenses") }
     from(
         "build.gradle.kts", "settings.gradle.kts", "gradle.properties", "gradlew", "gradlew.bat",

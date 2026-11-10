@@ -13,6 +13,8 @@ class SPWLyricsIslandPlaybackExtension : PlaybackExtensionPoint {
     private val lyrics = SpwLyricsExtension()
 
     override fun onBeforeLoadLyrics(mediaItem: PlaybackExtensionPoint.MediaItem): String? {
+        // The host may satisfy lyrics locally and never invoke the after-missing callback.
+        TagPlaybackBridge.onTrackChanged(mediaItem)
         island.onBeforeLoadLyrics(mediaItem)
         return lyrics.onBeforeLoadLyrics(mediaItem)
     }

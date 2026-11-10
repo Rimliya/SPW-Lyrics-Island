@@ -67,7 +67,6 @@ class FileLyricsCacheTest {
         format = LyricsFormat.LRC,
         lines = listOf(LyricLine(startMs = 0, endMs = 1_000, text = "test")),
     )
-}
 
     @Test
     fun savedEmbeddedSelectionSurvivesMetadataRescan() {
@@ -85,3 +84,5 @@ class FileLyricsCacheTest {
             root.toFile().deleteRecursively()
         }
     }
+
+}

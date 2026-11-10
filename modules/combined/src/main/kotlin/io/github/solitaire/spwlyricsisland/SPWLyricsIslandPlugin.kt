@@ -39,22 +39,22 @@ class SPWLyricsIslandPlugin(context: PluginContext) : IslandPlugin(context) {
             LyricsWorkspacePageRegistry.setWorkbench(EmbeddedTagWorkbenchPage)
             PluginRuntime.install()
         } catch (error: Throwable) {
+            TagPlaybackBridge.stop()
             LyricsWorkspacePageRegistry.setWorkbench(null)
             runCatching { PluginRuntime.close() }
             runCatching { EmbeddedWorkbenchRuntime.stop() }
-            TagPlaybackBridge.stop()
             super.stop()
             throw error
         }
     }
 
     override fun stop() {
+        TagPlaybackBridge.stop()
         try {
             LyricsWorkspacePageRegistry.setWorkbench(null)
             PluginRuntime.close()
         } finally {
             runCatching { EmbeddedWorkbenchRuntime.stop() }
-            TagPlaybackBridge.stop()
             super.stop()
         }
     }

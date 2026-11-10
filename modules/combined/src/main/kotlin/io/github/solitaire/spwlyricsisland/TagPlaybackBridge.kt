@@ -3,96 +3,115 @@ package io.github.solitaire.spwlyricsisland
 import com.xuncorp.spw.workshop.api.PlaybackExtensionPoint
 import io.github.univers629.spwtagworkbench.data.Repo
 
-/**
- * Buffers the latest host playback snapshot until the embedded Tag Workbench is running.
- *
- * The host can deliver callbacks while the combined plugin is still starting. Dropping them
- * leaves the workbench paused or on an old position until the next host event, so keep only the
- * latest value and replay it once the workbench runtime owns its main-thread state.
- */
 internal object TagPlaybackBridge {
-    private data class Snapshot(
-        val track: PlaybackExtensionPoint.MediaItem?,
-        val hasTrack: Boolean,
-        val playing: Boolean?,
-        val position: Long?,
-        val lyricsLines: List<PlaybackExtensionPoint.LyricsLine>?,
-        val lyricsLine: PlaybackExtensionPoint.LyricsLine?,
-        val hasLyricsLine: Boolean,
-    )
+    private val relay = TagPlaybackRelay({ action -> Repo.postOnMain(action) }, object : TagPlaybackSink {
+        override fun track(value: PlaybackExtensionPoint.MediaItem) = Repo.onTrackChanged(value)
+        override fun playing(value: Boolean) = Repo.onPlayingChanged(value)
+        override fun position(value: Long) = Repo.onPosition(value)
+        override fun lines(value: List<PlaybackExtensionPoint.LyricsLine>) = Repo.onLyricLines(value)
+        override fun line(value: PlaybackExtensionPoint.LyricsLine?) = Repo.onLyricLine(value)
+    })
 
+    fun start() = relay.start()
+    fun stop() = relay.stop()
+    fun onTrackChanged(value: PlaybackExtensionPoint.MediaItem) = relay.onTrackChanged(value)
+    fun onPlayingChanged(value: Boolean) = relay.onPlayingChanged(value)
+    fun onPosition(value: Long) = relay.onPosition(value)
+    fun onLyricsLines(value: List<PlaybackExtensionPoint.LyricsLine>) = relay.onLyricsLines(value)
+    fun onLyricsLine(value: PlaybackExtensionPoint.LyricsLine?) = relay.onLyricsLine(value)
+}
+
+internal interface TagPlaybackSink {
+    fun track(value: PlaybackExtensionPoint.MediaItem)
+    fun playing(value: Boolean)
+    fun position(value: Long)
+    fun lines(value: List<PlaybackExtensionPoint.LyricsLine>)
+    fun line(value: PlaybackExtensionPoint.LyricsLine?)
+}
+
+/** Serializes startup replay with live callbacks and invalidates work queued before stop. */
+internal class TagPlaybackRelay(
+    private val post: (() -> Unit) -> Unit,
+    private val sink: TagPlaybackSink,
+) {
     private val lock = Any()
     private var running = false
+    private var generation = 0L
     private var track: PlaybackExtensionPoint.MediaItem? = null
-    private var hasTrack = false
     private var playing: Boolean? = null
     private var position: Long? = null
     private var lyricsLines: List<PlaybackExtensionPoint.LyricsLine>? = null
     private var lyricsLine: PlaybackExtensionPoint.LyricsLine? = null
     private var hasLyricsLine = false
 
-    fun start() {
-        val snapshot = synchronized(lock) {
-            running = true
-            Snapshot(track, hasTrack, playing, position, lyricsLines, lyricsLine, hasLyricsLine)
-                .also { clearLocked() }
+    fun start() = synchronized(lock) {
+        if (running) return@synchronized
+        running = true
+        val savedTrack = track
+        val savedPlaying = playing
+        val savedPosition = position
+        val savedLines = lyricsLines
+        val savedLine = lyricsLine
+        val savedHasLine = hasLyricsLine
+        // Post under the callback lock, before live updates can enter the queue.
+        dispatchLocked {
+            savedTrack?.let(sink::track)
+            savedPlaying?.let(sink::playing)
+            savedPosition?.let(sink::position)
+            savedLines?.let(sink::lines)
+            if (savedHasLine) sink.line(savedLine)
         }
-        if (Repo.stopped) return
-        Repo.postOnMain {
-            if (snapshot.hasTrack) snapshot.track?.let { Repo.onTrackChanged(it) }
-            snapshot.playing?.let { Repo.onPlayingChanged(it) }
-            snapshot.position?.let { Repo.onPosition(it) }
-            snapshot.lyricsLines?.let { Repo.onLyricLines(it) }
-            if (snapshot.hasLyricsLine) Repo.onLyricLine(snapshot.lyricsLine)
+        clearLocked()
+    }
+
+    fun stop() = synchronized(lock) {
+        running = false
+        generation++
+        clearLocked()
+    }
+
+    fun onTrackChanged(value: PlaybackExtensionPoint.MediaItem) = synchronized(lock) {
+        if (running) dispatchLocked { sink.track(value) }
+        else {
+            if (track != value) {
+                position = null
+                lyricsLines = null
+                lyricsLine = null
+                hasLyricsLine = false
+            }
+            track = value
         }
     }
 
-    fun stop() {
-        synchronized(lock) {
-            running = false
-            clearLocked()
-        }
+    fun onPlayingChanged(value: Boolean) = synchronized(lock) {
+        if (running) dispatchLocked { sink.playing(value) } else playing = value
     }
 
-    fun onTrackChanged(item: PlaybackExtensionPoint.MediaItem) {
-        val dispatch = synchronized(lock) {
-            if (running) true else { track = item; hasTrack = true; false }
-        }
-        if (dispatch && !Repo.stopped) Repo.postOnMain { Repo.onTrackChanged(item) }
+    fun onPosition(value: Long) = synchronized(lock) {
+        if (running) dispatchLocked { sink.position(value) } else position = value
     }
 
-    fun onPlayingChanged(value: Boolean) {
-        val dispatch = synchronized(lock) {
-            if (running) true else { playing = value; false }
-        }
-        if (dispatch && !Repo.stopped) Repo.postOnMain { Repo.onPlayingChanged(value) }
-    }
-
-    fun onPosition(value: Long) {
-        val dispatch = synchronized(lock) {
-            if (running) true else { position = value; false }
-        }
-        if (dispatch && !Repo.stopped) Repo.postOnMain { Repo.onPosition(value) }
-    }
-
-    fun onLyricsLines(value: List<PlaybackExtensionPoint.LyricsLine>) {
+    fun onLyricsLines(value: List<PlaybackExtensionPoint.LyricsLine>) = synchronized(lock) {
         val copy = value.toList()
-        val dispatch = synchronized(lock) {
-            if (running) true else { lyricsLines = copy; false }
-        }
-        if (dispatch && !Repo.stopped) Repo.postOnMain { Repo.onLyricLines(copy) }
+        if (running) dispatchLocked { sink.lines(copy) } else lyricsLines = copy
     }
 
-    fun onLyricsLine(value: PlaybackExtensionPoint.LyricsLine?) {
-        val dispatch = synchronized(lock) {
-            if (running) true else { lyricsLine = value; hasLyricsLine = true; false }
+    fun onLyricsLine(value: PlaybackExtensionPoint.LyricsLine?) = synchronized(lock) {
+        if (running) dispatchLocked { sink.line(value) }
+        else { lyricsLine = value; hasLyricsLine = true }
+    }
+
+    private fun dispatchLocked(action: () -> Unit) {
+        val expected = generation
+        post {
+            synchronized(lock) {
+                if (running && generation == expected) action()
+            }
         }
-        if (dispatch && !Repo.stopped) Repo.postOnMain { Repo.onLyricLine(value) }
     }
 
     private fun clearLocked() {
         track = null
-        hasTrack = false
         playing = null
         position = null
         lyricsLines = null

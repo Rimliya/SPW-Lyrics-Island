@@ -3,7 +3,7 @@
 将 **灵动词岛**、**SPW Lyrics** 与 **SPW Tag Workbench** 合并为一个 `.spmod`：顶部歌词入口统一打开标签工作台与歌词工具，词岛负责显示，SPW Lyrics 负责多来源歌词搜索与批量处理，Tag Workbench 负责标签、封面、艺术家图与 ReplayGain，打轴频谱复用宿主已初始化的 BASS。
 
 > 插件作者：`solitaire + 大肥鱼`。本项目是基于多个上游模块的合并发行版，Windows x64 专用，保留 OBS Spout2 透明输出。感谢原作者 GaBoron，以及 Tag Workbench 的 univers629 / salt-workshop contributors。
-> 当前 1.8.3 开发分支聚焦 Tag Workbench v1.4.0 缓存/写盘安全、AMLL 全量索引、宿主代码定位、GPU 后端回退和 x64 置顶修复。
+> 当前审阅分支以 `1.10.0-BASS-GPU` 为基线，保留定制功能并选择性移植外部音源接口、虚拟曲目恢复、中文翻译筛选和搜索异常兼容修复。范围与验证见 [本轮审阅记录](docs/upstream-review-20261110.md)。
 
 <p align="center">
   <a href="https://github.com/Rimliya/SPW-Lyrics-Island/releases/latest"><img src="https://img.shields.io/github/v/release/Rimliya/SPW-Lyrics-Island?label=Release" alt="Release"></a>
@@ -29,6 +29,7 @@ Release 提供一个运行包：`spw-lyrics-island-<版本>.spmod`；完整源�
 - 频谱打轴：直接复用 Salt Player 的宿主 BASS 解码，不再内置 FFmpeg 或 Media Runtime。
 - 标签工作台：顶部歌词入口默认打开工作台，可编辑多容器标签、匹配歌词 / 封面 / 艺术家图、查看频谱和逐字打轴，并提供 ReplayGain 测量；已合入 1.4.0 的 APEv2/DFF/MPC 写盘安全、容器识别、TTML、网络超时和缓存修复，侧栏、悬浮按钮和独立插件 Hook 保持移除。
 - 词岛右键可“禁用当前获取的逐字歌词”：自动结果不匹配时按曲目退回本地歌词，再从 SPW Lyrics 设置中手动搜索正确结果。
+- 外部音源：兼容上游 JMX v1 播放协议，按音源会话隔离歌词、播放控制和缓存；来源退出或租约过期后恢复宿主。音源插件需主动接入 [外部播放 API](docs/external-playback-api.md)，此功能本身不播放音频。
 - 三个配置页合并到同一个插件设置中：`灵动词岛`、`SPW Lyrics` 与 `音乐标签工作台`。
 
 ## 解耦结构
@@ -51,9 +52,9 @@ Lyrics 模块只暴露通用的工作台页面注册点，Tag Workbench 的实�
 
 | 模块 | 来源 | 记录版本 | 提交 |
 | --- | --- | --- | --- |
-| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | `1.3.0-GPU` + upstream `1.2.2` GPU 回退 / x64 置顶 + 启动显示恢复 + PingFang-only | `a0e9cc1` + 1.8.3 patches |
-| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | `3.1.0-f.1` + Combined 页面注册 + upstream `3.2.1` AMLL / 宿主定位修复 | `3a84c97` + 1.8.3 patches |
-| `modules/tag-workbench` | [Rimliya/SPW-Tag-Workbench](https://github.com/Rimliya/SPW-Tag-Workbench) | `embedded-workbench` + upstream `1.4.0` | `22d70be` |
+| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | GPU fork + 1.10.0 已选修复 + 上游翻译 / 外部音源 / 虚拟曲目补丁 | `a0e9cc1` + selected through `5828206` |
+| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | Combined / BASS fork + 1.10.0 已选工作流 + 上游外部音源 / HTTP 兼容补丁 | `3a84c97` + selected through `6ca00db` |
+| `modules/tag-workbench` | [Rimliya/SPW-Tag-Workbench](https://github.com/Rimliya/SPW-Tag-Workbench) | 嵌入式 `1.4.0` + 已选 `1.4.4` 候选排序 / QQ 重试 | `22d70be` + `406afa4` selected |
 
 原始项目：[GaBoron/SPW-island](https://github.com/GaBoron/SPW-island)、[GaBoron/SPW-Lyrics](https://github.com/GaBoron/SPW-Lyrics)、[univers629/SPW-Tag-Workbench](https://github.com/univers629/SPW-Tag-Workbench)。
 

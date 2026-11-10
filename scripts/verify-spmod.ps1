@@ -80,7 +80,9 @@ try {
         "classes/licenses/tag-workbench/libebur128-COPYING.txt",
         "classes/native/win-x64/ebur128.dll",
         "classes/i18n/strings-zh.properties",
-        "classes/io/github/solitaire/spwlyrics/integration/BassTimingAudioDecoder.class"
+        "classes/io/github/solitaire/spwlyrics/integration/BassTimingAudioDecoder.class",
+        "classes/io/github/solitaire/spwlyrics/integration/ExternalPlaybackClient.class",
+        "classes/io/github/solitaire/spwisland/host/ExternalPlaybackSession.class"
     )
     foreach ($required in $requiredEntries) {
         if (-not $entries.ContainsKey($required)) { throw "Missing package entry: $required" }
@@ -101,7 +103,8 @@ try {
         "classes/native/windows-x64/ffprobe.exe",
         "classes/native/windows-x64/spw-jvm-worker.exe",
         "classes/native/windows-x64/spw-platform.exe",
-        "classes/licenses/media-runtime/LICENSE"
+        "classes/licenses/media-runtime/LICENSE",
+        "classes/dev/gaboron/spw/api/ExternalPlayback.class"
     )
     foreach ($forbidden in $forbiddenEntries) {
         if ($entries.ContainsKey($forbidden)) { throw "BASS-only package must not contain: $forbidden" }

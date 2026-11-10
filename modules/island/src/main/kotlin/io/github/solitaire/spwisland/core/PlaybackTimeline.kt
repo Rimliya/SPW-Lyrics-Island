@@ -52,7 +52,14 @@ class PlaybackTimeline(private val nanoTime: () -> Long = System::nanoTime) : Pl
     @Synchronized fun metadataLoaded(token: Long, value: TrackMetadata) {
         if (generation == token && track != null) metadata = value
     }
+    /** Late source metadata updates retain the selected track's clock, lyrics and seek acknowledgement. */
+    @Synchronized fun updateTrackMetadata(value: Track) {
+        if (value.playbackId.isBlank() || value.playbackId != track?.playbackId) return
+        track = value
+        pausedPresentation = pausedPresentation?.copy(track = value)
+    }
     @Synchronized fun trackGeneration(): Long = generation
+    @Synchronized fun externalPlaybackRate(value: Double) { rateTracker.useRate(value) }
 
     /** Returns the current generation only while the host has no usable track metadata. */
     @Synchronized fun missingTrackGeneration(allowIdle: Boolean = false): Long? = generation.takeIf {
