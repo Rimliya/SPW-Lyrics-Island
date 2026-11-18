@@ -1,42 +1,102 @@
 package io.github.solitaire.spwlyrics.provider
 
-import io.github.solitaire.spwlyrics.codec.*
-import io.github.solitaire.spwlyrics.domain.*
+import io.github.solitaire.spwlyrics.codec.LyricsContentFilter
+import io.github.solitaire.spwlyrics.codec.TtmlCodec
+import io.github.solitaire.spwlyrics.domain.LyricsCandidate
+import io.github.solitaire.spwlyrics.domain.LyricsDocument
+import io.github.solitaire.spwlyrics.domain.LyricsSource
+import io.github.solitaire.spwlyrics.domain.MatchEngine
+import io.github.solitaire.spwlyrics.domain.TrackQuery
 import kotlinx.serialization.json.JsonObject
 
-/** Public catalog metadata with an Apple-ID-based lyric adapter; no account token is embedded. */
+/** Lyric-catalog search and ISRC downloads, with legacy Apple catalog selections kept usable. */
 class AppleMusicProvider(private val http: ProviderHttp) : LyricsProvider {
     override val source = LyricsSource.APPLE
+    private val catalog = LrcRedClient(http)
+
     override fun search(query: TrackQuery, keywords: String, limit: Int): List<LyricsCandidate> {
-        val root = providerJson.parseToJsonElement(http.get("https://itunes.apple.com/search?term=${ProviderHttpClient.encode(keywords)}&entity=song&country=us&limit=${limit.coerceIn(1, 50)}")) as JsonObject
+        if (keywords.isBlank() || limit <= 0) return emptyList()
+        val catalogResults = runCatching { catalog.search(keywords, limit) }
+            .onFailure(::rethrowCancellation)
+        catalogResults.getOrNull()?.takeIf { it.isNotEmpty() }?.let { return it }
+        val fallback = searchItunes(keywords, limit)
+        if (fallback.isEmpty()) catalogResults.getOrThrow()
+        return fallback
+    }
+
+    private fun searchItunes(keywords: String, limit: Int): List<LyricsCandidate> {
+        val url = "https://itunes.apple.com/search?term=${ProviderHttpClient.encode(keywords)}" +
+            "&entity=song&country=us&limit=${limit.coerceIn(1, 50)}"
+        val root = providerJson.parseToJsonElement(http.get(url)) as JsonObject
         return checkNotNull(root.array("results")) { "Apple Music 搜索响应缺少结果" }.mapNotNull { it.asObject() }.mapNotNull { song ->
             val id = song.long("trackId")?.toString() ?: return@mapNotNull null
-            LyricsCandidate(source, id, song.string("trackName").orEmpty(), TrackQuery.splitArtists(song.string("artistName").orEmpty()),
-                song.string("collectionName").orEmpty(), song.long("trackTimeMillis"), metadata = CandidateMetadata.fields(
-                    "date" to song.string("releaseDate")?.substringBefore('T'), "genre" to song.string("primaryGenreName"),
-                    "track_number" to song.long("trackNumber")?.toString(), "disc_number" to song.long("discNumber")?.toString(),
+            LyricsCandidate(
+                source = source,
+                remoteId = id,
+                title = song.string("trackName").orEmpty(),
+                artists = TrackQuery.splitArtists(song.string("artistName").orEmpty()),
+                album = song.string("collectionName").orEmpty(),
+                durationMs = song.long("trackTimeMillis"),
+                metadata = CandidateMetadata.fields(
+                    "date" to song.string("releaseDate")?.substringBefore('T'),
+                    "genre" to song.string("primaryGenreName"),
+                    "track_number" to song.long("trackNumber")?.toString(),
+                    "disc_number" to song.long("discNumber")?.toString(),
                     "composer" to song.string("composerName"),
-                    "cover_url" to song.string("artworkUrl100")?.replace("/100x100bb.", "/1200x1200bb.")))
+                    "cover_url" to song.string("artworkUrl100")?.replace("/100x100bb.", "/1200x1200bb."),
+                ),
+            )
         }.filter { it.title.isNotBlank() }.distinctBy { it.remoteId }.take(limit)
     }
-    override fun fetch(candidate: LyricsCandidate): LyricsDocument? = runCatching {
-        val root = providerJson.parseToJsonElement(http.get("https://lyrics.paxsenix.org/apple-music/lyrics?id=${ProviderHttpClient.encode(candidate.remoteId)}&ttml=false", mapOf("Accept" to "application/json"))) as JsonObject
-        val raw = listOf("ttmlContent", "ttml", "elrcMultiPerson", "elrc", "lrc").firstNotNullOfOrNull { key -> root.string(key)?.takeIf(String::isNotBlank) }
-        val document = if (raw != null) OnlineLyricsDecoder.parse(raw, source) else {
-            val lines = root.array("content").orEmpty().mapNotNull { it.asObject() }.mapNotNull { row ->
-                val start = row.long("timestamp") ?: return@mapNotNull null
-                val words = row.array("text").orEmpty().mapNotNull { it.asObject() }.mapNotNull { word ->
-                    val from = word.long("timestamp") ?: return@mapNotNull null
-                    val to = word.long("endtime") ?: return@mapNotNull null
-                    val text = word.string("text") ?: return@mapNotNull null
-                    LyricWord(from, to, text)
-                }
-                val text = if (words.isEmpty()) row.string("plain") ?: row.string("text") else words.joinToString("") { it.text }
-                text?.takeIf(String::isNotBlank)?.let { LyricLine(start, row.long("endtime"), it, words) }
+
+    override fun fetch(candidate: LyricsCandidate): LyricsDocument? {
+        if (Thread.currentThread().isInterrupted) throw InterruptedException("Apple Music request cancelled")
+        val fromCatalog = runCatching {
+            val selected = if (candidate.remoteId.startsWith(LrcRedClient.ID_PREFIX)) candidate else {
+                val query = TrackQuery(candidate.title, candidate.artists, candidate.album, durationMs = candidate.durationMs)
+                val keywords = (listOf(candidate.title) + candidate.artists).joinToString(" ")
+                MatchEngine.decide(query, catalog.search(keywords, 20)).winner?.candidate
             }
-            LyricsDocument(source, LyricsFormat.LRC, lines)
+            selected?.let(catalog::fetch)
+        }.onFailure(::rethrowCancellation).getOrNull()
+        if (fromCatalog != null || candidate.remoteId.startsWith(LrcRedClient.ID_PREFIX)) return fromCatalog
+
+        val id = ProviderHttpClient.encode(candidate.remoteId)
+        // The public TTML cache remains readable when the live lyric service is overloaded.
+        // Both paths address the exact catalog ID; never substitute a different recording.
+        val paths = listOf("cache/$id", "lyrics?id=$id&ttml=true")
+        for (path in paths) {
+            if (Thread.currentThread().isInterrupted) throw InterruptedException("Apple Music request cancelled")
+            val document = runCatching {
+                val response = http.get(
+                    "https://lyrics.paxsenix.org/apple-music/$path",
+                    mapOf("Accept" to "application/ttml+xml, application/xml, application/json"),
+                )
+                decodeTtml(response)?.let { LyricsContentFilter.clean(it, candidate) }
+            }.onFailure(::rethrowCancellation).getOrNull()
+            if (document != null) return document
         }
-        LyricsContentFilter.clean(document, candidate)
-    }.getOrNull()
+        return null
+    }
+
+    private fun decodeTtml(response: String): LyricsDocument? {
+        val raw = response.trim().removePrefix("\uFEFF").trimStart()
+        val ttml = if (raw.startsWith("{")) {
+            val root = providerJson.parseToJsonElement(raw) as JsonObject
+            if (root.string("error") == "true") return null
+            listOf("ttmlContent", "ttml").firstNotNullOfOrNull { key ->
+                root.string(key)?.takeIf(String::isNotBlank)
+            } ?: return null
+        } else raw
+        // Do not turn an HTTP-200 error page or JSON message into plain lyric text.
+        if (!ttml.trimStart().startsWith("<")) return null
+        return TtmlCodec().parse(ttml, source)
+    }
+
     override fun metadata(candidate: LyricsCandidate): LyricsCandidate = candidate.copy(metadata = CandidateMetadata.basic(candidate))
+
+    private fun rethrowCancellation(error: Throwable) {
+        if (error is InterruptedException) throw error
+        ProviderCancellation.checkActive()
+    }
 }

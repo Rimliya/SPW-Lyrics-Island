@@ -80,7 +80,7 @@ object LyricsSimilarity {
     ): Boolean = accepts(prepare(reference), candidate, level)
 
     private fun usableLines(document: LyricsDocument): List<String> = document.lines.asSequence()
-        .filterNot { it.background }
+        .filterNot { it.background || it.sourceCredit }
         .map(::lineText)
         .filter { line -> line.count(Char::isLetterOrDigit) >= MIN_LINE_CHARACTERS }
         .toList()

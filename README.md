@@ -3,7 +3,7 @@
 将 **灵动词岛**、**SPW Lyrics** 与 **SPW Tag Workbench** 合并为一个 `.spmod`：顶部歌词入口统一打开标签工作台与歌词工具，词岛负责显示，SPW Lyrics 负责多来源歌词搜索与批量处理，Tag Workbench 负责标签、封面、艺术家图与 ReplayGain，打轴频谱复用宿主已初始化的 BASS。
 
 > 插件作者：`solitaire + 大肥鱼`。本项目是基于多个上游模块的合并发行版，Windows x64 专用，保留 OBS Spout2 透明输出。感谢原作者 GaBoron，以及 Tag Workbench 的 univers629 / salt-workshop contributors。
-> `1.10.0-BASS-GPU` 保留定制功能并选择性移植外部音源接口、虚拟曲目恢复、中文翻译筛选和搜索异常兼容修复。当前 `1.10.1-test.1-BASS-GPU` 是独立优化测试版，包含请求取消、自动缓存校验与画布回收，见 [优化范围与测试](docs/optimization-124.md)；1.10.0 的来源见 [审阅记录](docs/upstream-review-20261110.md)。
+> `1.10.0-BASS-GPU` 保留定制功能并选择性移植外部音源接口、虚拟曲目恢复、中文翻译筛选和搜索异常兼容修复。当前 `1.10.1-test.2-BASS-GPU` 包含[请求取消、自动缓存校验与画布回收](docs/optimization-124.md)，以及录屏工具条避让、玻璃弹窗输入恢复、缺字字体回退和 Apple Music 歌词获取修复。1.10.0 的来源见 [审阅记录](docs/upstream-review-20261110.md)。
 
 <p align="center">
   <a href="https://github.com/Rimliya/SPW-Lyrics-Island/releases/latest"><img src="https://img.shields.io/github/v/release/Rimliya/SPW-Lyrics-Island?label=Release" alt="Release"></a>
@@ -52,8 +52,8 @@ Lyrics 模块只暴露通用的工作台页面注册点，Tag Workbench 的实�
 
 | 模块 | 来源 | 记录版本 | 提交 |
 | --- | --- | --- | --- |
-| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | GPU fork + 1.10.0 已选修复 + 上游翻译 / 外部音源 / 虚拟曲目补丁 | `a0e9cc1` + selected through `5828206` |
-| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | Combined / BASS fork + 1.10.0 已选工作流 + 上游外部音源 / HTTP 兼容补丁 | `3a84c97` + selected through `6ca00db` |
+| `modules/island` | [Rimliya/SPW-island](https://github.com/Rimliya/SPW-island) | GPU fork + 1.10.0 已选修复 + 上游翻译 / 外部音源 / 虚拟曲目；录屏工具条避让 / 弹窗输入 / 缺字字体回退 | `a0e9cc1` + selected through `5b20380` |
+| `modules/lyrics` | [Rimliya/SPW-Lyrics](https://github.com/Rimliya/SPW-Lyrics) | Combined / BASS fork + 1.10.0 已选工作流 + 上游外部音源 / HTTP 兼容 / Apple Music 歌词修复 | `3a84c97` + selected through `891daeb` |
 | `modules/tag-workbench` | [Rimliya/SPW-Tag-Workbench](https://github.com/Rimliya/SPW-Tag-Workbench) | 嵌入式 `1.4.0` + 已选 `1.4.4` 候选排序 / QQ 重试 | `22d70be` + `406afa4` selected |
 
 原始项目：[GaBoron/SPW-island](https://github.com/GaBoron/SPW-island)、[GaBoron/SPW-Lyrics](https://github.com/GaBoron/SPW-Lyrics)、[univers629/SPW-Tag-Workbench](https://github.com/univers629/SPW-Tag-Workbench)。
